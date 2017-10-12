@@ -16,7 +16,7 @@ program
 
 var rcon_host    = program.host   ? program.host   : `127.0.0.1:28016`;
 var rcon_secret  = program.secret ? program.secret : ``;
-var rcon_command = program.args   ? program.args   : ``;
+var rcon_command = program.args   ? program.args[0]   : ``;
 
 if (rcon_command == ``) {
   console.log(`No command entered for remote server`);
@@ -25,6 +25,7 @@ if (rcon_command == ``) {
 }
 
 console.log(`rustyconsole -h ${rcon_host} -s ${rcon_secret} ${rcon_command}`)
+console.log(rcon_command);
 
 var rconService = new RconService();
 

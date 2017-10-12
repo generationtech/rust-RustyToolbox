@@ -82,6 +82,7 @@ module.exports = function RconService() {
       Name: "WebRcon"
     };
 
+    console.log(msg);
     console.log(packet);
 
     console.log("sending command");
