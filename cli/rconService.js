@@ -19,10 +19,14 @@ module.exports = function RconService() {
 
   Service.Connect = function(addr, pass) {
     this.Socket = new WebSocket("ws://" + addr + "/" + pass);
+//    this.Socket = new WebSocket("ws://" + addr + "/" + pass, {localAddress: `192.168.1.16`});
+
     this.Address = addr;
 
+//    console.log(this.Socket);
     this.Socket.onmessage = function(e) {
       console.log(e.data);
+      Service.Disconnect();
 /*      var data = angular.fromJson(e.data);
 
       //
@@ -79,6 +83,7 @@ module.exports = function RconService() {
       Name: "WebRcon"
     };
 
+    console.log(msg);
     console.log(packet);
 
     console.log("sending command");
