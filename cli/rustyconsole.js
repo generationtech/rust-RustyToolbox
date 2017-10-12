@@ -4,28 +4,54 @@
 var program     = require('commander');
 var RconService = require('./rconService')
 
+var defaultIPAddress = `127.0.0.1`;
+var defaultPort      = `28016`;
+var defaultSecret    = ``;
+
+var rconHost         = null;
+var rconSecret       = null;
+var rconCommand      = null;
+
 program
   .version('0.1.0')
-  .usage('[options] <RCON command to be sent to Rust server>')
-  .option('-h, --host [optional]',   'RCON host IP address:port, defaults to 127.0.0.1:28016')
-  .option('-s, --secret [optional]', 'RCON host password, defaults to blank password')
-  .parse(process.argv);
+  .usage('[options] "RCON command sent to Rust server"')
+  .arguments('<cmd>')
+  .option('-h, --host [optional]',   `host IP address:port, default ${defaultIPAddress}:${defaultPort}`)
+  .option('-s, --secret [optional]', 'host password, default blank password')
+  .action(function(cmd) {
+    console.log('host: %s secret: %s cmd: %s', program.host, program.secret, cmd);
+    if (cmd == ``) {
+      console.log(`No command entered for remote server`);
+      program.outputHelp();
+      process.exit(1);
+    } else {
+      rconHost    = program.host   ? program.host   : `${defaultIPAddress}:${defaultPort}`;
+      rconSecret  = program.secret ? program.secret : ``;
+      rconCommand = cmd;
+    }
 
+
+  })
+  .parse(process.argv);
+  console.log(`rustyconsole -h ${rconHost} -s ${rconSecret} ${rconCommand}`)
+
+  console.log(rconCommand);
+/*
 //const [,, ... args] = process.argv
 //console.log(`RustConsole ${program.args}`)
 
-var rcon_host    = program.host   ? program.host   : `127.0.0.1:28016`;
-var rcon_secret  = program.secret ? program.secret : ``;
-var rcon_command = program.args   ? program.args[0]   : ``;
+var rconHost    = program.host   ? program.host   : `127.0.0.1:28016`;
+var rconSecret  = program.secret ? program.secret : ``;
+var rconCommand = program.args   ? program.args[0]   : ``;
 
-if (rcon_command == ``) {
+if (rconCommand == ``) {
   console.log(`No command entered for remote server`);
   program.outputHelp();
   process.exit(1);
 }
 
-console.log(`rustyconsole -h ${rcon_host} -s ${rcon_secret} ${rcon_command}`)
-console.log(rcon_command);
+console.log(`rustyconsole -h ${rconHost} -s ${rconSecret} ${rconCommand}`)
+console.log(rconCommand);
 
 var rconService = new RconService();
 
@@ -40,7 +66,7 @@ rconService.OnOpen = function() {
   Connected = true;
   console.log("OnConnected");
   address = rconService.Address;
-  rconService.Command(rcon_command, 1);
+  rconService.Command(rconCommand, 1);
   return;
 }
 
@@ -57,18 +83,22 @@ rconService.OnMessage = function(msg) {
 }
 
 
-rconService.Connect( rcon_host, rcon_secret );
+rconService.Connect( rconHost, rconSecret );
 console.log('Welcome to My Console,');
 setTimeout(function() {
     console.log('Blah blah blah blah extra-blah');
 
 }, 3000);
+
+*/
 /*while (Connected == false) {
   console.log("sloop");
   setTimeout(function (){
     console.log("loop");
   }, 1000);
 }*/
+/*
 console.log("next");
-//rconService.Command(rcon_command, 1);
+//rconService.Command(rconCommand, 1);
 //rconService.Disconnect();
+*/

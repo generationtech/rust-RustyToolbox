@@ -18,8 +18,8 @@ module.exports = function RconService() {
   var LastIndex = 1001;
 
   Service.Connect = function(addr, pass) {
-//    this.Socket = new WebSocket("ws://" + addr + "/" + pass);
-    this.Socket = new WebSocket("ws://" + addr + "/" + pass, {localAddress: `192.168.1.16`});
+    this.Socket = new WebSocket("ws://" + addr + "/" + pass);
+//    this.Socket = new WebSocket("ws://" + addr + "/" + pass, {localAddress: `192.168.1.16`});
 
     this.Address = addr;
 
