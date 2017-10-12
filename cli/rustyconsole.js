@@ -39,6 +39,7 @@ rconService.OnOpen = function() {
   Connected = true;
   console.log("OnConnected");
   address = rconService.Address;
+  rconService.Command(rcon_command, 1);
   return;
 }
 
@@ -59,7 +60,7 @@ rconService.Connect( rcon_host, rcon_secret );
 console.log('Welcome to My Console,');
 setTimeout(function() {
     console.log('Blah blah blah blah extra-blah');
-    rconService.Command(rcon_command, 1);
+
 }, 3000);
 /*while (Connected == false) {
   console.log("sloop");
