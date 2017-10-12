@@ -19,22 +19,20 @@ program
   .option('-h, --host [optional]',   `host IP address:port, default ${defaultIPAddress}:${defaultPort}`)
   .option('-s, --secret [optional]', 'host password, default blank password')
   .action(function(cmd) {
-    console.log('host: %s secret: %s cmd: %s', program.host, program.secret, cmd);
-    if (cmd == ``) {
-      console.log(`No command entered for remote server`);
-      program.outputHelp();
-      process.exit(1);
-    } else {
-      rconHost    = program.host   ? program.host   : `${defaultIPAddress}:${defaultPort}`;
-      rconSecret  = program.secret ? program.secret : ``;
       rconCommand = cmd;
-    }
-
-
   })
   .parse(process.argv);
-  console.log(`rustyconsole -h ${rconHost} -s ${rconSecret} ${rconCommand}`)
 
+  if (!rconCommand || rconCommand == "``") {
+    console.log(`No command entered for remote server`);
+    program.outputHelp();
+    process.exit(1);
+  } else {
+    rconHost    = program.host   ? program.host   : `${defaultIPAddress}:${defaultPort}`;
+    rconSecret  = program.secret ? program.secret : ``;
+  }
+
+  console.log(`rustyconsole -h ${rconHost} -s ${rconSecret} ${rconCommand}`)
   console.log(rconCommand);
 /*
 //const [,, ... args] = process.argv
