@@ -26,6 +26,7 @@ module.exports = function RconService() {
 //    console.log(this.Socket);
     this.Socket.onmessage = function(e) {
       console.log(e.data);
+      Service.Disconnect();
 /*      var data = angular.fromJson(e.data);
 
       //
