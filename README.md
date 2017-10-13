@@ -1,6 +1,6 @@
 # RustyToolbox
 
-A set of tools to help manage Facepunch Rust servers from Windows server command lines
+A set of tools to help manage Facepunch Rust servers from Windows command line
 
 #### [RustyConsole](rustyconsole/)
 
