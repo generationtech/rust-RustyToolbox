@@ -13,7 +13,6 @@ Developed while using nodejs 8.6.0
 3. run `npm link` to create a global command link in either Linux or Windows
 
 <h5>Usage:</h5>
-
 ```
 Usage: rustyconsole [options] "RCON command sent to Rust server"
 
