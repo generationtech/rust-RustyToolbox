@@ -2,7 +2,7 @@
 'use strict';
 
 var program     = require('commander');
-var RconService = require('./rconService')
+const WebSocket = require('ws');
 
 var defaultIPAddress = `127.0.0.1`;
 var defaultPort      = `28016`;
@@ -32,52 +32,43 @@ if (!rconCommand || rconCommand == "``") {
   rconSecret  = program.secret ? program.secret : ``;
 }
 
-var rconService = new RconService();
+var rconService = { Socket: null };
 
-var Connected = false;
-var address = null;
-
-var IsConnected = function() {
-  return rconService.IsConnected();
+rconService.Disconnect = function() {
+  if (rconService.Socket) {
+    rconService.Socket.close();
+    rconService.Socket = null;
+  }
 }
 
-rconService.OnOpen = function() {
-  Connected = true;
-  console.log("OnConnected");
-  address = rconService.Address;
+rconService.Command = function(msg, identifier) {
+  if (rconService.Socket === null || !rconService.Socket.readyState === 1)
+    return;
+
+  if (identifier === null)
+    identifier = -1;
+
+  var packet = {
+    Identifier: identifier,
+    Message: msg,
+    Name: "WebRcon"
+  };
+
+  rconService.Socket.send(JSON.stringify(packet));
+};
+
+rconService.Socket = new WebSocket("ws://" + rconHost + "/" + rconSecret);
+
+rconService.Socket.onmessage = function(e) {
+  console.log(e.data);
+  rconService.Disconnect();
+}
+
+rconService.Socket.onopen = function() {
   rconService.Command(rconCommand, 1);
   return;
 }
 
-rconService.OnClose = function(ev) {
-  console.log("OnDisconnected", ev);
-}
-
-rconService.OnError = function(ev) {
-  console.log("OnConnectionError", ev);
-}
-
-rconService.OnMessage = function(msg) {
-  console.log("OnMessage", msg);
-}
-
-
-rconService.Connect( rconHost, rconSecret );
-
-
-/*
-console.log('Welcome to My Console,');
-setTimeout(function() {
-    console.log('Blah blah blah blah extra-blah');
-
-}, 3000);
-*/
-/*while (Connected == false) {
-  console.log("sloop");
-  setTimeout(function (){
-    console.log("loop");
-  }, 1000);
-}*/
-//console.log("next");
-//rconService.Command(rconCommand, 1);
-//rconService.Disconnect();
+rconService.Socket.onerror  = function(ev) {
+   console.log("OnConnectionError", ev);
+ }
