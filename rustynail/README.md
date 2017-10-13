@@ -1,6 +1,6 @@
 # RustyNail
 
-Monitor Steam for Rust server updates and initiate a Rust server to update itself
+Monitor Steam for Rust server updates and notify a Rust server to update itself
 
 #### Usage:
 

@@ -1,6 +1,6 @@
 # RustyBranch
 
-Checks Steam API for Rust server and client updates for a development branch
+Checks Steam API for Rust server and client updates on a named development branch
 
 #### Usage:
 
