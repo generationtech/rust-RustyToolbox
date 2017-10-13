@@ -71,4 +71,4 @@ rconService.Socket.onopen = function() {
 
 rconService.Socket.onerror  = function(ev) {
    console.log("OnConnectionError", ev);
- }
+}
