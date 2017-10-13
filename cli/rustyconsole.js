@@ -28,7 +28,7 @@ program
   .option('-s, --secret [optional]', 'host password, default blank password')
   .option('-i, --id [optional]', 'message id')
   .option('-j, --json', 'output return data as JSON')
-  .option('-q, --quiet', 'supress output')
+  .option('-q, --quiet', 'suppress output')
   .action(function(cmd) {
       rconService.Command = cmd;
   })
