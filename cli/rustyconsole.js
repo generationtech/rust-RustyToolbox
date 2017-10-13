@@ -2,7 +2,8 @@
 'use strict';
 
 var program     = require('commander');
-var RconService = require('./rconService')
+const WebSocket = require('ws');
+//var RconService = require('./rconService')
 
 var defaultIPAddress = `127.0.0.1`;
 var defaultPort      = `28016`;
@@ -32,25 +33,16 @@ if (!rconCommand || rconCommand == "``") {
   rconSecret  = program.secret ? program.secret : ``;
 }
 
-var rconService = new RconService();
-
-var Connected = false;
-var address = null;
-
-var IsConnected = function() {
-  return rconService.IsConnected();
-}
+var rconService = { Socket: null };
 
 rconService.OnOpen = function() {
-  Connected = true;
   console.log("OnConnected");
-  address = rconService.Address;
   rconService.Command(rconCommand, 1);
   return;
 }
 
 rconService.OnClose = function(ev) {
-  console.log("OnDisconnected", ev);
+//  console.log("OnDisconnected", ev);
 }
 
 rconService.OnError = function(ev) {
@@ -61,8 +53,49 @@ rconService.OnMessage = function(msg) {
   console.log("OnMessage", msg);
 }
 
+rconService.Socket = new WebSocket("ws://" + rconHost + "/" + rconSecret);
 
-rconService.Connect( rconHost, rconSecret );
+rconService.Socket.onmessage = function(e) {
+  console.log(e.data);
+  rconService.Disconnect();
+}
+
+rconService.Socket.onopen = rconService.OnOpen;
+rconService.Socket.onclose = rconService.OnClose;
+
+rconService.Disconnect = function() {
+  if (rconService.Socket) {
+    rconService.Socket.close();
+    rconService.Socket = null;
+  }
+}
+
+rconService.Command = function(msg, identifier) {
+  if (rconService.Socket.Socket === null)
+    return;
+
+//  if (!this.IsConnected())
+  //  return;
+
+  if (identifier === null)
+    identifier = -1;
+
+  var packet = {
+    Identifier: identifier,
+    Message: msg,
+    Name: "WebRcon"
+  };
+
+  console.log(msg);
+  console.log(packet);
+
+  console.log("sending command");
+  rconService.Socket.send(JSON.stringify(packet));
+};
+
+
+
+//rconService.Connect( rconHost, rconSecret );
 
 
 /*

@@ -54,7 +54,7 @@ module.exports = function RconService() {
 */    };
 
     this.Socket.onopen = this.OnOpen;
-//    this.Socket.onclose = this.OnClose;
+    this.Socket.onclose = this.OnClose;
 //    this.Socket.onerror = this.OnError;
   }
 
