@@ -20,4 +20,4 @@ Monitor Steam for Rust server updates and notify a Rust server to update itself
 
 3. Run `npm link` to create a global command link in either Linux or Windows
 
-4. A copy of the steamcmd is included with our GitHub repo and should update itself when ran by the RustyToolbox utilities. If not, you can install a current version yourself by downloading it from [here](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip)
+4. A copy of `steamcmd.exe` is included with our GitHub repo and should update itself when ran by the RustyToolbox utilities. If not, you can install a current version yourself by downloading it from [here](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) and unzipping to `steam/` . Do <b>not</b> use the `steamcmd.exe` from your Rust server or any other active Steam game installation
