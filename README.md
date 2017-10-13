@@ -10,4 +10,4 @@ Sends a Rust server console command from Windows command line through networked 
 Checks Steam API for Rust server and client updates on a development branch
 
 #### [RustyNail](rustynail/)
-Monitor Steam for Rust server updates and initiate a Rust server to update itself
+Monitor Steam for Rust server updates and notify a Rust server to update itself

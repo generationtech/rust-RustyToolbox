@@ -4,7 +4,7 @@ Simple to use command-line version of webrcon for Rust servers.
 
 Developed while using nodejs 8.6.0
 
-<h5>Install:</h5>
+#### Install:
 
 1. install nodejs for your environment)
 
@@ -12,7 +12,7 @@ Developed while using nodejs 8.6.0
 
 3. run `npm link` to create a global command link in either Linux or Windows
 
-<h5>Usage:</h5>
+#### Usage:
 
 ```
 Usage: rustyconsole [options] "RCON command sent to Rust server"

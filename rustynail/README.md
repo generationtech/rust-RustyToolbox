@@ -2,7 +2,7 @@
 
 Monitor Steam for Rust server updates and initiate a Rust server to update itself
 
-<h5>Usage:</h5>
+#### Usage:
 
 ```
 Usage: rustynail [options]
