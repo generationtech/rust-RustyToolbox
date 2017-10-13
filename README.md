@@ -1,29 +1,13 @@
-# RustyConsole
+# RustyToolbox
 
-Simple to use command-line version of webrcon for Rust servers.
+A set of tools to help manage Rust servers by Facepunch from
+Windows server command lines
 
-Developed while using nodejs 8.6.0
+<h3>RustyConsole</h3>
+Sends a Rust server console command from Windows command through web RCON. It's a one-and-done style of sending commands
 
-<h5>Install:</h5>
+<h3>RustyBranch</h3>
+Checks Steam API for Rust server and client updates for a development branch
 
-1. install nodejs for your environment)
-
-2. extract rustyconsole github sources
-
-3. run `npm link` to create a global command link in either Linux or Windows
-
-<h5>Usage:</h5>
-
-```
-Usage: rustyconsole [options] "RCON command sent to Rust server"
-
-Options:
-
-  -V, --version            output the version number
-  -h, --host [optional]    host IP address:port, default 127.0.0.1:28016
-  -s, --secret [optional]  host password, default blank password
-  -i, --id [optional]      message id
-  -j, --json               output return data as JSON
-  -q, --quiet              suppress output
-  -h, --help               output usage information
-```
+<h3>RustyNail</h3>
+Monitor Steam for Rust server updates and initiate a Rust server to update itself
