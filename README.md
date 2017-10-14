@@ -11,3 +11,13 @@ Checks Steam API for Rust server and client updates on a named development branc
 
 #### [RustyNail](rustynail/)
 Monitor Steam for Rust server updates and notify a Rust server to update itself
+
+#### Install:
+
+1. Install nodejs for your environment)
+
+2. Extract rustyconsole github sources
+
+3. Run `npm link` to create a global command link in either Linux or Windows
+
+4. A copy of `steamcmd.exe` is included with our GitHub repo and should update itself when ran by the RustyToolbox utilities. If not, you can install a current version yourself by downloading it from [here](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) and unzipping to `steam/` . Do <b>not</b> use the `steam/` directory from your Rust server or any other active Steam game installation
