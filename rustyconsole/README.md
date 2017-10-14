@@ -1,6 +1,6 @@
 # RustyConsole
 
-Simple to use command-line version of webrcon for Rust servers.
+Sends Rust server console command from Windows command line through networked web RCON. It's a one-and-done style of sending commands
 
 #### Usage:
 

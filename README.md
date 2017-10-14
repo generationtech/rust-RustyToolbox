@@ -3,8 +3,7 @@
 Set of tools to help manage Facepunch Rust servers from Windows command line
 
 #### [RustyConsole](rustyconsole/)
-
-Sends a Rust server console command from Windows command line through networked web RCON. It's a one-and-done style of sending commands
+Sends Rust server console command from Windows command line through networked web RCON. It's a one-and-done style of sending commands
 
 #### [RustyBranch](rustybranch/)
 Checks Steam API for Rust server and client updates on a named development branch
