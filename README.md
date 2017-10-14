@@ -15,9 +15,9 @@ Monitor Steam for Rust server updates and notify a Rust server to update itself
 
 Developed while using nodejs 8.6.0
 
-1. Install nodejs for your environment)
+1. Install nodejs for your environment
 
-2. Extract rustyconsole github sources
+2. Extract RustyToolbox github sources
 
 3. Run `npm link` to create a global command link in either Linux or Windows
 
