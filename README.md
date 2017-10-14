@@ -13,7 +13,7 @@ Monitor Steam for Rust server updates and notify a Rust server to update itself
 
 #### Install:
 
-Developed while using nodejs 8.6.0
+Developed with nodejs 8.6.0
 
 1. Install nodejs for your environment
 
