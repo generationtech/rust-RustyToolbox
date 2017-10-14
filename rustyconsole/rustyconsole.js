@@ -3,6 +3,7 @@
 
 var   program   = require('commander');
 const WebSocket = require('ws');
+const util = require('util');
 
 var defaults = {
       IPAddress: `127.0.0.1`,
@@ -86,6 +87,6 @@ rconService.Socket.onopen = function() {
   rconService.SendMessage(rconService.Command, rconService.Id);
 }
 
-rconService.Socket.onerror  = function(ev) {
-   if (!rconService.Quiet) console.log("OnConnectionError", ev);
+rconService.Socket.onerror  = function(e) {
+   if (!rconService.Quiet) console.log(e.code);
 }
