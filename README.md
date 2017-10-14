@@ -19,6 +19,8 @@ Developed while using nodejs 8.6.0
 
 2. Extract RustyToolbox github sources
 
-3. Run `npm link` to create a global command link in either Linux or Windows
+3. Run `npm i` to install needed nodejs modules
 
-4. A copy of `steamcmd.exe` is included with our GitHub repo and should update itself when ran by the RustyToolbox utilities. If not, you can install a current version yourself by downloading it from [here](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) and unzipping to `steam/` . Do <b>not</b> use the `steam/` directory from your Rust server or any other active Steam game installation
+4. Run `npm link` to create a global command link in either Linux or Windows
+
+5. A copy of `steamcmd.exe` is included with our GitHub repo and should update itself when ran by the RustyToolbox utilities. If not, you can install a current version yourself by downloading it from [here](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) and unzipping to `steam/` . Do <b>not</b> use the `steam/` directory from your Rust server or any other active Steam game installation
