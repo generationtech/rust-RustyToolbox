@@ -9,6 +9,9 @@ Usage: rustybranch [options]
 
 Options:
 
-  -V, --version            output the version number
-  -h, --help               output usage information
+  -V, --version        output the version number
+  -s, --server         fetch dedicated server buildid (default)
+  -c, --client         fetch client application buildid
+  -b, --branch <name>  branch checked, defaults to "public"
+  -h, --help           output usage information
 ```

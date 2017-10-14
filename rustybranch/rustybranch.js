@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-var cp      =  require("child_process");
+var cp      = require("child_process");
 var vdf     = require('vdf');
 var program = require('commander');
 
@@ -9,11 +9,11 @@ var appid  = '258550';
 var branch = 'public';
 
 program
-  .version('0.1.0')
+  .version('0.2.0')
   .usage('[options]')
-  .option('-s, --server]',   `fetch dedicated server buildid (default)`)
-  .option('-c, --client]',   `fetch client application buildid`)
-  .option('-b, --branch [optional]', 'branch checked, defaults to "public"')
+  .option('-s, --server',        `fetch dedicated server buildid (default)`)
+  .option('-c, --client',        `fetch client application buildid`)
+  .option('-b, --branch <name>', 'branch checked, defaults to "public"')
   .parse(process.argv);
 
 if (program.server && program.client) {
@@ -34,11 +34,11 @@ if (program.server && program.client) {
 // the extra half at the end ourselves
 cp.exec('steam\\steamcmd +login anonymous +app_info_print "' + appid + '" +app_info_print "' + appid + '" +quit',
   function(error, data) {
+    // cut the junk from front of return data
     var dStart = data.search('"' + appid + '"');
-    data = data.substring(dStart, data.lastIndexOf('"' + appid + '"') - dStart - 12);
-//      console.log(data)
-    data = vdf.parse(data)
-//      console.log(data)
-//      console.log(data['258550'])
-    console.log(data[appid]['depots']['branches'][branch]['buildid'])
+    // cut the extra 0.5 result from data
+    data = data.substring(dStart, data.lastIndexOf('AppID : ' + appid));
+    // convert Valve Value Data Format to JS object
+    data = vdf.parse(data);
+    console.log(data[appid]['depots']['branches'][branch]['buildid']);
 });

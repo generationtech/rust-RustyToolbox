@@ -21,14 +21,14 @@ var rconService = {
     };
 
 program
-  .version('0.1.0')
+  .version('0.2.0')
   .usage('[options] "RCON command sent to Rust server"')
   .arguments('<cmd>')
-  .option('-h, --host [optional]',   `host IP address:port, default ${defaults.IPAddress}:${defaults.Port}`)
-  .option('-s, --secret [optional]', 'host password, default blank password')
-  .option('-i, --id [optional]',     'message id')
-  .option('-j, --json',              'output return data as JSON')
-  .option('-q, --quiet',             'suppress output')
+  .option('-s, --server <host:port>',  `server IP address:port, default ${defaults.IPAddress}:${defaults.Port}`)
+  .option('-p, --password <password>', 'server password, defaults to blank password')
+  .option('-i, --id <number>',         'message id')
+  .option('-j, --json',                'output return data as JSON')
+  .option('-q, --quiet',               'suppress output')
   .action(function(cmd) {
       rconService.Command = cmd;
   })
@@ -39,11 +39,11 @@ if (!rconService.Command || rconService.Command == "``") {
   program.outputHelp();
   process.exit(1);
 } else {
-  rconService.Host   = program.host   ? program.host   : `${defaults.IPAddress}:${defaults.Port}`;
-  rconService.Secret = program.secret ? program.secret : `${defaults.Port}`;
-  rconService.Id     = program.id     ? program.id     : rconService.Id;
-  rconService.JSON   = program.json   ? program.json   : null;
-  rconService.Quiet  = program.quiet  ? program.quiet  : null;
+  rconService.Host   = program.server   ? program.server   : `${defaults.IPAddress}:${defaults.Port}`;
+  rconService.Secret = program.password ? program.password : `${defaults.Port}`;
+  rconService.Id     = program.id       ? program.id       : rconService.Id;
+  rconService.JSON   = program.json     ? program.json     : null;
+  rconService.Quiet  = program.quiet    ? program.quiet    : null;
 }
 
 rconService.Disconnect = function() {
