@@ -6,17 +6,26 @@ var vdf       = require('vdf');
 var program   = require('commander');
 var branchapi = require('../rustybranch/branchapi');
 
-var appid        = '258550';
-var manifestFile = 'appmanifest_258550.acf';
-var manifestDir  = 'C:\\Server\\rustds\\steamapps';
+var defaults = {
+      appid:        `258550`,
+      manifestFile: `appmanifest_258550.acf`,
+      manifestDir:  `C:\\Server\\rustds\\steamapps`,
+//      timer:        60000,
+      timer:        3000,
+    };
+
+var manifestFile;
+var timer;
 
 program
-  .version('0.2.0')
+  .version('0.3.0')
   .usage('[options]')
-  .option('-m, --manifest <directory>', `directory containing ${manifestFile}, defaults to ${manifestDir}`)
+  .option('-m, --manifest <directory>', `directory containing ${defaults.manifestFile}, defaults to ${defaults.manifestDir}`)
+  .option('-t, --timer <directory>', `check loop timer, defaults to ${defaults.timer}`)
   .parse(process.argv);
 
-manifestFile = program.manifest   ? program.manifest + '\\' + manifestFile : manifestDir + '\\' + manifestFile;
+manifestFile = program.manifest ? program.manifest + '\\' + defaults.manifestFile : defaults.manifestDir + '\\' + defaults.manifestFile;
+timer        = program.timer    ? program.timer : defaults.timer;
 
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
@@ -31,24 +40,40 @@ function readManifest(file) {
   });
 }
 
+var flagRunning = true;
+
 (async ()=> {
   var rustBuildid;
   var rustBranch;
   var steamBuildid;
 
-  try{
-    let retval  = await readManifest(manifestFile);
-    rustBuildid = retval['buildid'];
-    rustBranch  = retval['branch'];
-    if (!rustBranch) rustBranch = "public";
-    console.log(`Server: ${rustBuildid}`);
-  } catch(e) {
-    console.log(e)
+  while (flagRunning) {
+      try {
+        let retval  = await readManifest(manifestFile);
+        rustBuildid = retval['buildid'];
+        rustBranch  = retval['branch'];
+        if (!rustBranch) rustBranch = "public";
+        console.log(`Server: ${rustBuildid}`);
+      } catch(e) {
+        console.log(e)
+      }
+
+      try {
+        steamBuildid = await branchapi.getBuildID(defaults.appid, rustBranch);
+        console.log(`Steam:  ${steamBuildid}`);
+      } catch(e) {
+        console.log(e)
+      }
+
+      if (rustBuildid != steamBuildid) {
+        // initiate server update process
+        flagRunning = false;
+      }
+
+      console.log('before wait');
+      await new Promise((resolve, reject) => setTimeout(() => resolve(), timer));
+      console.log('after wait');
+
   }
-  try{
-    steamBuildid = await branchapi.getBuildID(appid, rustBranch);
-    console.log(`Steam:  ${steamBuildid}`);
-  } catch(e) {
-    console.log(e)
-  }
+  process.exit(0);
 })();
