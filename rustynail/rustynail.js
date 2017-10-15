@@ -11,8 +11,8 @@ var defaults = {
       appid:        `258550`,
       manifestFile: `appmanifest_258550.acf`,
       manifestDir:  `C:\\Server\\rustds\\steamapps`,
-//      timer:        60000,
-      timer:        3000,
+      timer:        60000,
+//      timer:        3000,
       IPAddress: `127.0.0.1`,
       Port:      `28016`,
       Secret:    ``,
@@ -52,6 +52,7 @@ function readManifest(file) {
     readStream.on('data', function(chunk) {
       data += chunk;
     }).on('end', function() {
+      readStream.close();
       let manifest = vdf.parse(data);
       resolve({ 'buildid': manifest['AppState']['buildid'], 'branch': manifest['AppState']['UserConfig']['betakey'] });
     });
@@ -78,28 +79,28 @@ var flagState = states.RUNNING;
           rustBuildid = retval['buildid'];
           rustBranch  = retval['branch'];
           if (!rustBranch) rustBranch = "public";
-          console.log(`Server: ${rustBuildid}`);
         } catch(e) {
           console.log(e)
         }
 
         try {
           steamBuildid = await branchapi.getBuildID(defaults.appid, rustBranch);
-          console.log(`Steam:  ${steamBuildid}`);
         } catch(e) {
           console.log(e)
         }
+        console.log(`Server: ${rustBuildid} Steam: ${steamBuildid}`);
       }
 
       if (rustBuildid != steamBuildid) {
         if (flagState == states.RUNNING) {
           flagState = states.UPGRADE;
-          rcon.Command = 'version';
+          console.log(`Buildid differs, updating server`);
+          rcon.Command = 'quit';
           try {
             let retval = await consoleapi.sendCommand(rcon);
-            if (retval['result']) {
-              console.log('console command returned: ' + retval['result']);
-            }
+//            if (retval['result']) {
+//              console.log('console command returned: ' + retval['result']);
+//            }
           } catch(e) {
             console.log('console command returned error: ' + e)
           }
@@ -111,7 +112,7 @@ var flagState = states.RUNNING;
 //              console.log('console command returned: ' + retval['result']);
 //            }
             if (!retval['error']) {
-              console.log('server back online');
+              console.log('Server back online after update');
               flagState = states.RUNNING;
             }
           } catch(e) {
@@ -120,10 +121,9 @@ var flagState = states.RUNNING;
         }
       }
 
-      console.log('before wait');
+//      console.log('before wait');
       await new Promise((resolve, reject) => setTimeout(() => resolve(), timer));
-      console.log('after wait');
-
+//      console.log('after wait');
   }
   process.exit(0);
 })();
