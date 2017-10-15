@@ -49,8 +49,8 @@ if (!rcon.Command || rcon.Command == "``") {
 (async ()=> {
   try{
     let retval = await consoleapi.sendCommand(rcon);
-    if (retval) {
-      console.log(retval);
+    if (retval['result']) {
+      console.log(retval['result']);
     }
   } catch(e) {
     console.log(e)

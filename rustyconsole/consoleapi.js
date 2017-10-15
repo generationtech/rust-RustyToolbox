@@ -38,7 +38,7 @@ module.exports.sendCommand = function(rconService) {
         }
       }
       rconService.Disconnect();
-      resolve(retval);
+      resolve({ 'result': retval, 'error': null });
     }
 
     rconService.Socket.onopen = function() {
@@ -46,7 +46,8 @@ module.exports.sendCommand = function(rconService) {
     }
 
     rconService.Socket.onerror  = function(e) {
-       if (!rconService.Quiet) console.log(e.code);
+      if (!rconService.Quiet) console.log(e.message);
+      resolve({ 'result': null, 'error': true });
     }
   })
 }
