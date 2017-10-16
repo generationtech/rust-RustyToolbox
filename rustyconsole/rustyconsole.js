@@ -2,53 +2,53 @@
 'use strict';
 
 var program    = require('commander');
-var consoleapi = require('./consoleapi');
+var consoleAPI = require('./consoleapi');
 
 var defaults = {
-      IPAddress: `127.0.0.1`,
-      Port:      `28016`,
-      Secret:    ``,
+      ipAddress: `127.0.0.1`,
+      port:      `28016`,
+      secret:    ``,
     };
 
 var rcon = {
-      Socket:  null,
-      Host:    null,
-      Secret:  null,
-      Command: null,
-      Id:      1,
-      JSON:    null,
-      Quiet:   null,
+      socket:  null,
+      host:    null,
+      secret:  null,
+      command: null,
+      id:      1,
+      json:    null,
+      quiet:   null,
     };
 
 program
   .version('0.3.0')
   .usage('[options] "RCON command sent to Rust server"')
   .arguments('<cmd>')
-  .option('-s, --server <host:port>',  `server IP address:port, default ${defaults.IPAddress}:${defaults.Port}`)
+  .option('-s, --server <host:port>',  `server IP address:port, default ${defaults.ipAddress}:${defaults.port}`)
   .option('-p, --password <password>', 'server password, defaults to blank password')
   .option('-i, --id <number>',         'message id')
   .option('-j, --json',                'output return data as JSON')
   .option('-q, --quiet',               'suppress output')
   .action(function(cmd) {
-      rcon.Command = cmd;
+      rcon.command = cmd;
   })
   .parse(process.argv);
 
-if (!rcon.Command || rcon.Command == "``") {
+if (!rcon.command || rcon.command == "``") {
   console.log(`No command entered for remote server`);
   program.outputHelp();
   process.exit(1);
 } else {
-  rcon.Host   = program.server   ? program.server   : `${defaults.IPAddress}:${defaults.Port}`;
-  rcon.Secret = program.password ? program.password : `${defaults.Port}`;
-  rcon.Id     = program.id       ? program.id       : rcon.Id;
-  rcon.JSON   = program.json     ? program.json     : null;
-  rcon.Quiet  = program.quiet    ? program.quiet    : null;
+  rcon.host   = program.server   ? program.server   : `${defaults.ipAddress}:${defaults.port}`;
+  rcon.secret = program.password ? program.password : `${defaults.port}`;
+  rcon.id     = program.id       ? program.id       : rcon.id;
+  rcon.json   = program.json     ? program.json     : null;
+  rcon.quiet  = program.quiet    ? program.quiet    : null;
 }
 
 (async ()=> {
   try{
-    let retval = await consoleapi.sendCommand(rcon);
+    let retval = await consoleAPI.sendCommand(rcon);
     if (retval['result']) {
       console.log(retval['result']);
     }

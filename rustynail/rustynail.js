@@ -8,24 +8,24 @@ var branchapi  = require('../rustybranch/branchapi');
 var consoleapi = require('../rustyconsole/consoleapi');
 
 var defaults = {
-      appid:        `258550`,
+      appID:        `258550`,
       manifestFile: `appmanifest_258550.acf`,
       manifestDir:  `C:\\Server\\rustds\\steamapps`,
       timer:        60000,
 //      timer:        3000,
-      IPAddress: `127.0.0.1`,
-      Port:      `28016`,
-      Secret:    ``,
+      ipAddress: `127.0.0.1`,
+      port:      `28016`,
+      secret:    ``,
     };
 
 var rcon = {
-      Socket:  null,
-      Host:    null,
-      Secret:  null,
-      Command: null,
-      Id:      1,
-      JSON:    null,
-      Quiet:   null,
+      socket:  null,
+      host:    null,
+      secret:  null,
+      command: null,
+      id:      1,
+      json:    null,
+      quiet:   null,
     };
 
 var manifestFile;
@@ -34,16 +34,16 @@ var timer;
 program
   .version('0.3.0')
   .usage('[options]')
-  .option('-s, --server <host:port>' ,  `server IP address:port, default ${defaults.IPAddress}:${defaults.Port}`)
+  .option('-s, --server <host:port>' ,  `server IP address:port, default ${defaults.ipAddress}:${defaults.port}`)
   .option('-p, --password <password>',  `server password, defaults to blank password`)
   .option('-m, --manifest <directory>', `directory containing ${defaults.manifestFile}, defaults to ${defaults.manifestDir}`)
-  .option('-t, --timer <directory>',    `check loop timer, defaults to ${defaults.timer}`)
+  .option('-t, --timer <directory>',    `check loop timer in milliseconds, defaults to ${defaults.timer}`)
   .parse(process.argv);
 
 manifestFile = program.manifest ? program.manifest + '\\' + defaults.manifestFile : defaults.manifestDir + '\\' + defaults.manifestFile;
 timer        = program.timer    ? program.timer : defaults.timer;
-rcon.Host    = program.server   ? program.server   : `${defaults.IPAddress}:${defaults.Port}`;
-rcon.Secret  = program.password ? program.password : `${defaults.Port}`;
+rcon.host    = program.server   ? program.server   : `${defaults.ipAddress}:${defaults.port}`;
+rcon.secret  = program.password ? program.password : `${defaults.port}`;
 
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
@@ -60,11 +60,13 @@ function readManifest(file) {
 }
 
 var states = {
-  STOP:    0,
-  RUNNING: 1,
-  UPGRADE: 2,
+  STOP:    0,   // shut down rustynail and exit
+  BOOT:    1,   // startup operations
+  RUNNING: 2,   // normal operation. checking for updates and server availability
+  UPGRADE: 3,   // server upgrade need detected and initiated
 }
 
+//var flagState = states.BOOT;
 var flagState = states.RUNNING;
 
 (async ()=> {
@@ -73,57 +75,68 @@ var flagState = states.RUNNING;
   var steamBuildid;
 
   while (flagState != states.STOP) {
+/*
+    // process is starting, read local config file if available
+    if (flagState == states.BOOT) {
+      try {
+        let retval  = await readConfig(manifestFile);
+        flagState = states.RUNNING;
+      } catch(e) {
+        console.log(e)
+      }
+    }
+*/
+    // normal running state, check for updates
+    if (flagState == states.RUNNING) {
+      try {
+        let retval  = await readManifest(manifestFile);
+        rustBuildid = retval['buildid'];
+        rustBranch  = retval['branch'];
+        if (!rustBranch) rustBranch = "public";
+      } catch(e) {
+        console.log(e)
+      }
+
+      try {
+        steamBuildid = await branchapi.getBuildID(defaults.appID, rustBranch);
+      } catch(e) {
+        console.log(e)
+      }
+      console.log(`Server: ${rustBuildid} Steam: ${steamBuildid}`);
+    }
+
+    // check if update is detected
+    if (rustBuildid != steamBuildid) {
       if (flagState == states.RUNNING) {
+        flagState = states.UPGRADE;
+        console.log(`Buildid differs, updating server`);
+        rcon.command = 'quit';
         try {
-          let retval  = await readManifest(manifestFile);
-          rustBuildid = retval['buildid'];
-          rustBranch  = retval['branch'];
-          if (!rustBranch) rustBranch = "public";
+          let retval = await consoleapi.sendCommand(rcon);
+    //            if (retval['result']) {
+    //              console.log('console command returned: ' + retval['result']);
+    //            }
         } catch(e) {
-          console.log(e)
+          console.log('console command returned error: ' + e)
         }
-
+      } else if (flagState == states.UPGRADE) {
+        rcon.command = 'version';
         try {
-          steamBuildid = await branchapi.getBuildID(defaults.appid, rustBranch);
+          let retval = await consoleapi.sendCommand(rcon);
+    //            if (retval['result']) {
+    //              console.log('console command returned: ' + retval['result']);
+    //            }
+          if (!retval['error']) {
+            console.log('Server back online after update');
+            flagState = states.RUNNING;
+          }
         } catch(e) {
-          console.log(e)
-        }
-        console.log(`Server: ${rustBuildid} Steam: ${steamBuildid}`);
-      }
-
-      if (rustBuildid != steamBuildid) {
-        if (flagState == states.RUNNING) {
-          flagState = states.UPGRADE;
-          console.log(`Buildid differs, updating server`);
-          rcon.Command = 'quit';
-          try {
-            let retval = await consoleapi.sendCommand(rcon);
-//            if (retval['result']) {
-//              console.log('console command returned: ' + retval['result']);
-//            }
-          } catch(e) {
-            console.log('console command returned error: ' + e)
-          }
-        } else if (flagState == states.UPGRADE) {
-          rcon.Command = 'version';
-          try {
-            let retval = await consoleapi.sendCommand(rcon);
-//            if (retval['result']) {
-//              console.log('console command returned: ' + retval['result']);
-//            }
-            if (!retval['error']) {
-              console.log('Server back online after update');
-              flagState = states.RUNNING;
-            }
-          } catch(e) {
-            console.log('console command returned error: ' + e)
-          }
+          console.log('console command returned error: ' + e)
         }
       }
-
-//      console.log('before wait');
-      await new Promise((resolve, reject) => setTimeout(() => resolve(), timer));
-//      console.log('after wait');
+    }
+    // snooze the process a bit
+    await new Promise((resolve, reject) => setTimeout(() => resolve(), timer));
   }
   process.exit(0);
 })();

@@ -1,17 +1,17 @@
-const WebSocket = require('ws');
+const webSocket = require('ws');
 const util = require('util');
 
 module.exports.sendCommand = function(rconService) {
   return new Promise(function(resolve, reject) {
     rconService.Disconnect = function() {
-      if (rconService.Socket) {
-        rconService.Socket.close();
-        rconService.Socket = null;
+      if (rconService.socket) {
+        rconService.socket.close();
+        rconService.socket = null;
       }
     }
 
     rconService.SendMessage = function(msg, identifier) {
-      if (rconService.Socket === null || !rconService.Socket.readyState === 1)
+      if (rconService.socket === null || !rconService.socket.readyState === 1)
         return;
 
       if (identifier === null)
@@ -23,15 +23,15 @@ module.exports.sendCommand = function(rconService) {
         Name: "WebRcon"
       };
 
-      rconService.Socket.send(JSON.stringify(packet));
+      rconService.socket.send(JSON.stringify(packet));
     };
 
-    rconService.Socket = new WebSocket("ws://" + rconService.Host + "/" + rconService.Secret);
+    rconService.socket = new webSocket("ws://" + rconService.host + "/" + rconService.secret);
 
-    rconService.Socket.onmessage = function(e) {
+    rconService.socket.onmessage = function(e) {
       let retval = null;
-      if (!rconService.Quiet) {
-        if (rconService.JSON) {
+      if (!rconService.quiet) {
+        if (rconService.json) {
           retval = e.data;
         } else {
           retval = JSON.parse(e.data).Message;
@@ -41,12 +41,12 @@ module.exports.sendCommand = function(rconService) {
       resolve({ 'result': retval, 'error': null });
     }
 
-    rconService.Socket.onopen = function() {
-      rconService.SendMessage(rconService.Command, rconService.Id);
+    rconService.socket.onopen = function() {
+      rconService.SendMessage(rconService.command, rconService.id);
     }
 
-    rconService.Socket.onerror  = function(e) {
-      if (!rconService.Quiet) console.log(e.message);
+    rconService.socket.onerror  = function(e) {
+      if (!rconService.quiet) console.log(e.message);
       resolve({ 'result': null, 'error': true });
     }
   })
