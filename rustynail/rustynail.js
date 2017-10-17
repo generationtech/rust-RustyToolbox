@@ -13,7 +13,6 @@ var defaults = {
       appID:    `258550`,
       manifest: `C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf`,
       timer:    60000,
-//      timer:    3000,
       server:   `127.0.0.1:28016`,
       password: ``,
       config:   `rustytoolbox.json`,
@@ -41,14 +40,14 @@ var rusty = {
     };
 
 program
-  .version('0.3.0')
+  .version('0.4.0')
   .usage('[options]')
-  .option('-c, --config <file>' ,       `path and filename of optional config file`)
-  .option('-s, --server <host:port>' ,  `server IP address:port, default ${defaults.server}`)
-  .option('-p, --password <password>',  `server password, defaults to blank password`)
-  .option('-m, --manifest <path>',      `location of manifest file, defaults to ${defaults.manifest}`)
-  .option('-t, --timer <directory>',    `check loop timer in milliseconds, defaults to ${defaults.timer}`)
-  .option('-f, --forcecfg',             `re-loading of config file overrides command-line options`)
+  .option('-c, --config <file>' ,      `path and filename of optional config file`)
+  .option('-s, --server <host:port>' , `server IP address:port, default ${defaults.server}`)
+  .option('-p, --password <password>', `server password, defaults to blank password`)
+  .option('-m, --manifest <path>',     `location of manifest file, defaults to ${defaults.manifest}`)
+  .option('-t, --timer <directory>',   `check loop timer in milliseconds, defaults to ${defaults.timer}`)
+  .option('-f, --forcecfg',            `re-loading of config file overrides command-line options`)
   .parse(process.argv);
 
 rusty.config = program.config ? program.config : defaults.config;
@@ -69,61 +68,85 @@ function readManifest(file) {
 
 function checkConfig(file) {
   return new Promise(function(resolve, reject) {
-    console.log(file);
     fs.stat(file, function(error, stats) {
         if (stats.mtime.getTime() != rusty.configDate.getTime()) {
-          console.log("they are different");
-
           try {
             var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
-            console.log(jsonConfig);
-      //      console.log(json["nine"]);
-        //    console.log(json.nine);
-            console.log(Object.keys(jsonConfig));
 
-            console.log("manifest");
-            setConfig(jsonConfig, "manifest", "manifest");
-            console.log("timer");
-            setConfig(jsonConfig, "timer",    "timer");
-            console.log("server");
-            setConfig(jsonConfig, "rcon.server", "server");
-            console.log("password");
-            setConfig(jsonConfig, "rcon.password", "password");
+            if (jsonConfig.hasOwnProperty("manifest") && !program.forcecfg) {
+              rusty.manifest = jsonConfig.manifest;
+            } else if (program.manifest) {
+              rusty.manifest = program.manifest;
+            } else {
+              rusty.manifest = defaults.manifest;
+            }
+
+            if (jsonConfig.hasOwnProperty("timer") && !program.forcecfg) {
+              rusty.timer = jsonConfig.timer;
+            } else if (program.timer) {
+              rusty.timer = program.timer;
+            } else {
+              rusty.timer = defaults.timer;
+            }
+
+            if (jsonConfig.hasOwnProperty("server") && !program.forcecfg) {
+              rusty.rcon.server = jsonConfig.server;
+            } else if (program.server) {
+              rusty.rcon.server = program.server;
+            } else {
+              rusty.rcon.server = defaults.server;
+            }
+
+            if (jsonConfig.hasOwnProperty("password") && !program.forcecfg) {
+              rusty.rcon.password = jsonConfig.password;
+            } else if (program.password) {
+              rusty.rcon.password = program.password;
+            } else {
+              rusty.rcon.password = defaults.password;
+            }
 
             rusty.configDate = stats.mtime;
+
+            printConfig();
+
           } catch(e) {
             console.log(e)
           }
         }
         resolve(stats);
     });
-/*
-      readStream.on('data', function(chunk) {
-      data += chunk;
-    }).on('end', function() {
-      readStream.close();
-      let manifest = vdf.parse(data);
-      resolve({ 'buildid': manifest['AppState']['buildid'], 'branch': manifest['AppState']['UserConfig']['betakey'] });
-    });
-    */
   });
 }
 
+/*
 function setConfig(jsonConfig, rustyKey, configKey) {
-//  console.log(Object.keys(jsonConfig));
-//  console.log(Object.keys(rusty));
-//  console.log(Object.keys(program));
-//  console.log(Object.keys(defaults));
+//  console.log(`setting: ${rustyKey} ${configKey}`);
   if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
-    console.log("setting from config file");
+//    console.log("config file");
     rusty[rustyKey] = jsonConfig[configKey];
   } else if (program[configKey]) {
-    console.log("setting from program option");
+//    console.log("program option");
     rusty[rustyKey] = program[configKey];
   } else {
-    console.log("setting from default");
+//    console.log("defaults");
     rusty[rustyKey] = defaults[configKey];
   }
+}
+*/
+
+function printConfig() {
+  console.log(`manifest:      ${rusty.manifest}`);
+  console.log(`timer:         ${rusty.timer}`);
+  console.log(`operation:     ${rusty.operation}`);
+  console.log(`config:        ${rusty.config}`);
+  console.log(`configDate:    ${rusty.configDate}`);
+  console.log(`rcon.socket:   ${rusty.rcon.socket}`);
+  console.log(`rcon.server:   ${rusty.rcon.server}`);
+  console.log(`rcon.password: ${rusty.rcon.password}`);
+  console.log(`rcon.command:  ${rusty.rcon.command}`);
+  console.log(`rcon.id:       ${rusty.rcon.id}`);
+  console.log(`rcon.json:     ${rusty.rcon.json}`);
+  console.log(`rcon.quiet:    ${rusty.rcon.quiet}`);
 }
 
 var states = {
@@ -135,10 +158,6 @@ var states = {
 
 //var rusty.operation = states.BOOT;
 rusty.operation = states.RUNNING;
-
-//console.log(rusty['operation']);
-//console.log(rusty['manifest']);
-//console.log(rusty['rcon']['id']);
 
 (async ()=> {
   var rustBuildid;
@@ -177,9 +196,6 @@ rusty.operation = states.RUNNING;
         rusty.rcon.command = 'quit';
         try {
           let retval = await consoleapi.sendCommand(rusty.rcon);
-    //            if (retval['result']) {
-    //              console.log('console command returned: ' + retval['result']);
-    //            }
         } catch(e) {
           console.log('console command returned error: ' + e)
         }
@@ -187,9 +203,6 @@ rusty.operation = states.RUNNING;
         rusty.rcon.command = 'version';
         try {
           let retval = await consoleapi.sendCommand(rusty.rcon);
-    //            if (retval['result']) {
-    //              console.log('console command returned: ' + retval['result']);
-    //            }
           if (!retval['error']) {
             console.log('Server back online after update');
             rusty.operation = states.RUNNING;
