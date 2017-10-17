@@ -31,12 +31,15 @@ var rconObj = {
 
 // process operational values
 var rusty = {
-      rcon:       rconObj,
-      manifest:   null,
-      timer:      null,
-      operation:  null,
-      config:     null,
-      configDate: new Date(),
+      rcon:         rconObj,
+      manifest:     null,
+      manifestDate: new Date(),
+      buildid:      null,
+      branch:       null,
+      timer:        null,
+      operation:    null,
+      config:       null,
+      configDate:  new Date(),
     };
 
 program
@@ -54,14 +57,35 @@ rusty.config = program.config ? program.config : defaults.config;
 
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
-    var data = '';
-    var readStream = fs.createReadStream(file, 'utf8');
-    readStream.on('data', function(chunk) {
-      data += chunk;
-    }).on('end', function() {
-      readStream.close();
-      let manifest = vdf.parse(data);
-      resolve({ 'buildid': manifest['AppState']['buildid'], 'branch': manifest['AppState']['UserConfig']['betakey'] });
+    // try not to waste time re-reading rust server manifest after booting
+    // rustynail unless the modified date/time changes, which would indicate
+    // the server was updated or re-installed outside of script control
+    // while script was running
+    fs.stat(file, function(error, stats) {
+//      console.log(`rusty.manifestDate: ${rusty.manifestDate.getTime()}`);
+//      console.log(`stats.mtime: ${stats.mtime.getTime()}`);
+      if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
+        try {
+          var data = '';
+          var readStream = fs.createReadStream(file, 'utf8');
+          readStream.on('data', function(chunk) {
+            data += chunk;
+          }).on('end', function() {
+            readStream.close();
+            let manifest  = vdf.parse(data);
+            var branch = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
+//            console.log(`branch resolve1: ${branch}`);
+            resolve({ 'buildid': manifest['AppState']['buildid'], 'branch': branch });
+          });
+          rusty.manifestDate = stats.mtime;
+        } catch(e) {
+          console.log(e)
+        }
+      } else {
+//        console.log(`buildid resolve2:       ${rusty.buildid}`);
+//        console.log(`branch resolve2:        ${rusty.branch}`);
+        resolve({ 'buildid': rusty.buildid, 'branch': rusty.branch });
+      }
     });
   });
 }
@@ -101,6 +125,9 @@ function setConfig(jsonConfig, rustyVar, configKey) {
 
 function printConfig() {
   console.log(`manifest:      ${rusty.manifest}`);
+  console.log(`manifestDate:  ${rusty.manifestDate}`);
+  console.log(`buildid:       ${rusty.buildid}`);
+  console.log(`branch:        ${rusty.branch}`);
   console.log(`timer:         ${rusty.timer}`);
   console.log(`operation:     ${rusty.operation}`);
   console.log(`config:        ${rusty.config}`);
@@ -137,24 +164,32 @@ rusty.operation = states.RUNNING;
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       try {
+//        await readManifest(rusty.manifest);
+//        console.log(`buildid:       ${rusty.buildid}`);
+//        console.log(`branch:        ${rusty.branch}`);
+
         let retval  = await readManifest(rusty.manifest);
-        rustBuildid = retval['buildid'];
-        rustBranch  = retval['branch'];
-        if (!rustBranch) rustBranch = "public";
+//        rustBuildid = retval['buildid'];
+//        rustBranch  = retval['branch'];
+        rusty.buildid = retval['buildid'];
+        rusty.branch  = retval['branch'];
+//        console.log(`buildid:       ${rusty.buildid}`);
+//        console.log(`branch:        ${rusty.branch}`);
+//        if (!rustBranch) rustBranch = "public";
       } catch(e) {
         console.log(e)
       }
 
       try {
-        steamBuildid = await branchapi.getBuildID(defaults.appID, rustBranch);
+        steamBuildid = await branchapi.getBuildID(defaults.appID, rusty.branch);
       } catch(e) {
         console.log(e)
       }
-      console.log(`Server: ${rustBuildid} Steam: ${steamBuildid}`);
+      console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
     }
 
     // check if update is detected
-    if (rustBuildid != steamBuildid) {
+    if (rusty.buildid != steamBuildid) {
       if (rusty.operation == states.RUNNING) {
         rusty.operation = states.UPGRADE;
         console.log(`Buildid differs, updating server`);
