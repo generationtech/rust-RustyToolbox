@@ -2,9 +2,9 @@
 'use strict';
 
 var program   = require('commander');
-var branchapi = require('./branchapi');
+var branchAPI = require('./branchapi');
 
-var appid   = '258550';
+var appID   = '258550';
 var branch  = 'public';
 
 program
@@ -21,7 +21,7 @@ if (program.server && program.client) {
   process.exit(1);
 } else {
   if (program.client) {
-    appid = '252490';
+    appID = '252490';
   }
   if (program.branch) {
     branch = program.branch;
@@ -30,7 +30,7 @@ if (program.server && program.client) {
 
 (async ()=> {
   try{
-    let retval = await branchapi.getBuildID(appid, branch);
+    let retval = await branchAPI.getBuildID(appID, branch);
     console.log(retval);
   } catch(e) {
     console.log(e)

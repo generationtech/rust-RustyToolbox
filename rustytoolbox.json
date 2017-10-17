@@ -1,0 +1,5 @@
+{
+  "manifest": "C:\\Rust\\Server\\rustds\\steamapps\\appmanifest_258550.acf",
+  "timer":    60000,
+  "server":   "127.0.0.1:28055"
+}

@@ -17,3 +17,5 @@ aults to C:\Server\rustds\steamapps
   -t, --timer <directory>     check loop timer, defaults to 60000
   -h, --help                  output usage information
 ```
+
+Uses the rustytoolbox config file and if during rustynail operation the config file changes, the program will re-read the config file and make adjustments as needed.
