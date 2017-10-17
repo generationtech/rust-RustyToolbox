@@ -38,7 +38,6 @@ var rusty = {
       operation:  null,
       config:     null,
       configDate: new Date(),
-      forcecfg:   false,
     };
 
 program
@@ -51,17 +50,6 @@ program
   .option('-t, --timer <directory>',    `check loop timer in milliseconds, defaults to ${defaults.timer}`)
   .option('-f, --forcecfg',             `re-loading of config file overrides command-line options`)
   .parse(process.argv);
-
-rusty.forcecfg = program.forcecfg    ? true : false;
-
-rusty.manifest      = program.manifest ? program.manifest : defaults.manifest;
-rusty.timer         = program.timer    ? program.timer    : defaults.timer;
-rusty.config        = program.config   ? program.config   : defaults.config;
-rusty.rcon.server   = program.server   ? program.server   : defaults.server;
-rusty.rcon.password = program.password ? program.password : defaults.password;
-
-function setRusty(parms) {
-}
 
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
@@ -79,23 +67,35 @@ function readManifest(file) {
 
 function checkConfig(file) {
   return new Promise(function(resolve, reject) {
-
-    try {
-      var json = JSON.parse(fs.readFileSync(file, 'utf8'));
-      console.log(json);
-      console.log(json["nine"]);
-      console.log(json.nine);
-      console.log(Object.keys(json));
-    } catch(e) {
-      console.log(e)
-    }
-
     fs.stat(file, function(error, stats) {
         if (stats.mtime.getTime() != rusty.configDate.getTime()) {
-          rusty.configDate = stats.mtime;
           console.log("they are different");
-        } else {
-          console.log("they are the same");
+
+          try {
+            var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
+            console.log(jsonConfig);
+      //      console.log(json["nine"]);
+        //    console.log(json.nine);
+            console.log(Object.keys(jsonConfig));
+
+            if (jsonConfig.hasOwnProperty("manifest") && !program.forcecfg) {
+              rusty.manifest = jsonConfig.manifest;
+            } else if (program.manifest) {
+              rusty.manifest = program.manifest;
+            } else {
+              rusty.manifest = defaults.manifest;
+            }
+
+            rusty.timer         = program.timer    ? program.timer    : defaults.timer;
+            rusty.config        = program.config   ? program.config   : defaults.config;
+            rusty.rcon.server   = program.server   ? program.server   : defaults.server;
+            rusty.rcon.password = program.password ? program.password : defaults.password;
+
+            rusty.configDate = stats.mtime;
+
+          } catch(e) {
+            console.log(e)
+          }
         }
         resolve(stats);
     });
@@ -110,6 +110,17 @@ function checkConfig(file) {
     */
   });
 }
+
+function setConfig(rustyKey, configKey) {
+  if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
+    rusty.rustyKey = jsonConfig.configKey;
+  } else if (program.key) {
+    rusty.rustyKey = program.configKey;
+  } else {
+    rusty.rustyKey = defaults.configKey;
+  }
+}
+
 
 var states = {
   STOP:    0,   // shut down rustynail and exit
