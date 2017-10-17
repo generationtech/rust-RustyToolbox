@@ -1,17 +1,19 @@
 const webSocket = require('ws');
 const util = require('util');
 
+var socket = null;
+
 module.exports.sendCommand = function(rconService) {
   return new Promise(function(resolve, reject) {
     rconService.Disconnect = function() {
-      if (rconService.socket) {
-        rconService.socket.close();
-        rconService.socket = null;
+      if (socket) {
+        socket.close();
+        socket = null;
       }
     }
 
     rconService.SendMessage = function(msg, identifier) {
-      if (rconService.socket === null || !rconService.socket.readyState === 1)
+      if (socket === null || !socket.readyState === 1)
         return;
 
       if (identifier === null)
@@ -23,12 +25,12 @@ module.exports.sendCommand = function(rconService) {
         Name: "WebRcon"
       };
 
-      rconService.socket.send(JSON.stringify(packet));
+      socket.send(JSON.stringify(packet));
     };
 
-    rconService.socket = new webSocket("ws://" + rconService.server + "/" + rconService.password);
+    socket = new webSocket("ws://" + rconService.server + "/" + rconService.password);
 
-    rconService.socket.onmessage = function(e) {
+    socket.onmessage = function(e) {
       let retval = null;
       if (!rconService.quiet) {
         if (rconService.json) {
@@ -41,11 +43,11 @@ module.exports.sendCommand = function(rconService) {
       resolve({ 'result': retval, 'error': null });
     }
 
-    rconService.socket.onopen = function() {
+    socket.onopen = function() {
       rconService.SendMessage(rconService.command, rconService.id);
     }
 
-    rconService.socket.onerror  = function(e) {
+    socket.onerror  = function(e) {
       if (!rconService.quiet) console.log(e.message);
       resolve({ 'result': null, 'error': true });
     }

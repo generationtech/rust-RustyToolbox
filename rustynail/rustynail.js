@@ -18,20 +18,15 @@ var defaults = {
       config:   `rustytoolbox.json`,
     };
 
-// data used to communicate with the RCON interface
-var rconObj = {
-      socket:   null,
-      server:   null,
-      password: null,
-      command:  null,
-      id:       1,
-      json:     null,
-      quiet:    null,
-    };
-
 // process operational values
 var rusty = {
-      rcon:       rconObj,
+      server:     null,
+      password:   null,
+      command:    null,
+      id:         1,
+      json:       null, //  not used
+      quiet:      null,
+
       manifest:   null,
       timer:      null,
       operation:  null,
@@ -90,19 +85,19 @@ function checkConfig(file) {
             }
 
             if (jsonConfig.hasOwnProperty("server") && !program.forcecfg) {
-              rusty.rcon.server = jsonConfig.server;
+              rusty.server = jsonConfig.server;
             } else if (program.server) {
-              rusty.rcon.server = program.server;
+              rusty.server = program.server;
             } else {
-              rusty.rcon.server = defaults.server;
+              rusty.server = defaults.server;
             }
 
             if (jsonConfig.hasOwnProperty("password") && !program.forcecfg) {
-              rusty.rcon.password = jsonConfig.password;
+              rusty.password = jsonConfig.password;
             } else if (program.password) {
-              rusty.rcon.password = program.password;
+              rusty.password = program.password;
             } else {
-              rusty.rcon.password = defaults.password;
+              rusty.password = defaults.password;
             }
 
             rusty.configDate = stats.mtime;
@@ -140,13 +135,12 @@ function printConfig() {
   console.log(`operation:     ${rusty.operation}`);
   console.log(`config:        ${rusty.config}`);
   console.log(`configDate:    ${rusty.configDate}`);
-  console.log(`rcon.socket:   ${rusty.rcon.socket}`);
-  console.log(`rcon.server:   ${rusty.rcon.server}`);
-  console.log(`rcon.password: ${rusty.rcon.password}`);
-  console.log(`rcon.command:  ${rusty.rcon.command}`);
-  console.log(`rcon.id:       ${rusty.rcon.id}`);
-  console.log(`rcon.json:     ${rusty.rcon.json}`);
-  console.log(`rcon.quiet:    ${rusty.rcon.quiet}`);
+  console.log(`rcon.server:   ${rusty.server}`);
+  console.log(`rcon.password: ${rusty.password}`);
+  console.log(`rcon.command:  ${rusty.command}`);
+  console.log(`rcon.id:       ${rusty.id}`);
+  console.log(`rcon.json:     ${rusty.json}`);
+  console.log(`rcon.quiet:    ${rusty.quiet}`);
 }
 
 var states = {
@@ -193,14 +187,14 @@ rusty.operation = states.RUNNING;
       if (rusty.operation == states.RUNNING) {
         rusty.operation = states.UPGRADE;
         console.log(`Buildid differs, updating server`);
-        rusty.rcon.command = 'quit';
+        rusty.command = 'quit';
         try {
           let retval = await consoleapi.sendCommand(rusty.rcon);
         } catch(e) {
           console.log('console command returned error: ' + e)
         }
       } else if (rusty.operation == states.UPGRADE) {
-        rusty.rcon.command = 'version';
+        rusty.command = 'version';
         try {
           let retval = await consoleapi.sendCommand(rusty.rcon);
           if (!retval['error']) {
