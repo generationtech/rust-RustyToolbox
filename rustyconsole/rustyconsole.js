@@ -5,26 +5,25 @@ var program    = require('commander');
 var consoleAPI = require('./consoleapi');
 
 var defaults = {
-      ipAddress: `127.0.0.1`,
-      port:      `28016`,
-      secret:    ``,
+      server:   `127.0.0.1:28016`,
+      password: ``,
     };
 
 var rcon = {
-      socket:  null,
-      host:    null,
-      secret:  null,
-      command: null,
-      id:      1,
-      json:    null,
-      quiet:   null,
+      socket:   null,
+      server:   null,
+      password: null,
+      command:  null,
+      id:       1,
+      json:     null,
+      quiet:    null,
     };
 
 program
   .version('0.3.0')
   .usage('[options] "RCON command sent to Rust server"')
   .arguments('<cmd>')
-  .option('-s, --server <host:port>',  `server IP address:port, default ${defaults.ipAddress}:${defaults.port}`)
+  .option('-s, --server <host:port>',  `server IP address:port, default ${defaults.server}`)
   .option('-p, --password <password>', 'server password, defaults to blank password')
   .option('-i, --id <number>',         'message id')
   .option('-j, --json',                'output return data as JSON')
@@ -39,11 +38,11 @@ if (!rcon.command || rcon.command == "``") {
   program.outputHelp();
   process.exit(1);
 } else {
-  rcon.host   = program.server   ? program.server   : `${defaults.ipAddress}:${defaults.port}`;
-  rcon.secret = program.password ? program.password : `${defaults.port}`;
-  rcon.id     = program.id       ? program.id       : rcon.id;
-  rcon.json   = program.json     ? program.json     : null;
-  rcon.quiet  = program.quiet    ? program.quiet    : null;
+  rcon.server   = program.server   ? program.server   : defaults.server;
+  rcon.password = program.password ? program.password : defaults.password;
+  rcon.id       = program.id       ? program.id       : rcon.id;
+  rcon.json     = program.json     ? program.json     : null;
+  rcon.quiet    = program.quiet    ? program.quiet    : null;
 }
 
 (async ()=> {

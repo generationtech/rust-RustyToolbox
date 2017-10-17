@@ -27,4 +27,4 @@ Developed with nodejs 8.6.0
 
 #### Config:
 
-Commands can be executed using command-line options or read from a config file. Default is to read from `rustytoolbox.conf` in current directory. When used by rustynail, if the config file is changed while the program is running, it'll re-read the config and adjust operation as needed. In the startup case, any options given on the command-line will override settings in the config file.
+Commands can be executed using command-line options or read from a config file. Default is to read from `rustytoolbox.json` in current directory. When used by rustynail, if the config file is changed while the program is running, it'll re-read the config and adjust operation as needed. In the startup case, any options given on the command-line will override settings in the config file.

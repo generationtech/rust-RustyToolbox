@@ -26,7 +26,7 @@ module.exports.sendCommand = function(rconService) {
       rconService.socket.send(JSON.stringify(packet));
     };
 
-    rconService.socket = new webSocket("ws://" + rconService.host + "/" + rconService.secret);
+    rconService.socket = new webSocket("ws://" + rconService.server + "/" + rconService.password);
 
     rconService.socket.onmessage = function(e) {
       let retval = null;

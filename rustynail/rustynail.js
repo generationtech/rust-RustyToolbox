@@ -10,56 +10,58 @@ var consoleapi = require('../rustyconsole/consoleapi');
 
 // setup some default values
 var defaults = {
-      appID:        `258550`,
-      manifestFile: `appmanifest_258550.acf`,
-      manifestDir:  `C:\\Server\\rustds\\steamapps`,
-      timer:        60000,
-//      timer:        3000,
-      ipAddress:    `127.0.0.1`,
-      port:         `28016`,
-      secret:       ``,
-      configFile:   `rustytoolbox.conf`,
+      appID:    `258550`,
+      manifest: `C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf`,
+      timer:    60000,
+//      timer:    3000,
+      server:   `127.0.0.1:28016`,
+      password: ``,
+      config:   `rustytoolbox.json`,
     };
 
 // data used to communicate with the RCON interface
 var rconObj = {
-      socket:  null,
-      host:    null,
-      secret:  null,
-      command: null,
-      id:      1,
-      json:    null,
-      quiet:   null,
+      socket:   null,
+      server:   null,
+      password: null,
+      command:  null,
+      id:       1,
+      json:     null,
+      quiet:    null,
     };
 
 // process operational values
 var rusty = {
-      rcon:            rconObj,
-      manifestFile:    null,
-      timer:           null,
-      operation:       null,
-      configFile:      null,
-      configFileDate:  new Date(),
-      configFileForce: false,
+      rcon:       rconObj,
+      manifest:   null,
+      timer:      null,
+      operation:  null,
+      config:     null,
+      configDate: new Date(),
+      forcecfg:   false,
     };
 
 program
   .version('0.3.0')
   .usage('[options]')
   .option('-c, --config <file>' ,       `path and filename of optional config file`)
-  .option('-s, --server <host:port>' ,  `server IP address:port, default ${defaults.ipAddress}:${defaults.port}`)
+  .option('-s, --server <host:port>' ,  `server IP address:port, default ${defaults.server}`)
   .option('-p, --password <password>',  `server password, defaults to blank password`)
-  .option('-m, --manifest <directory>', `directory containing ${defaults.manifestFile}, defaults to ${defaults.manifestDir}`)
+  .option('-m, --manifest <path>',      `location of manifest file, defaults to ${defaults.manifest}`)
   .option('-t, --timer <directory>',    `check loop timer in milliseconds, defaults to ${defaults.timer}`)
-  .option('-f, --force',                `re-loading of config file overrides command-line options`)
+  .option('-f, --forcecfg',             `re-loading of config file overrides command-line options`)
   .parse(process.argv);
 
-rusty.manifestFile    = program.manifest ? program.manifest + '\\' + defaults.manifestFile : defaults.manifestDir + '\\' + defaults.manifestFile;
-rusty.timer           = program.timer    ? program.timer      : defaults.timer;
-rusty.configFile      = program.config   ? program.config : defaults.configFile;
-rusty.configFileForce = program.force    ? true : false;
-rusty.rcon.host       = program.server   ? program.server : `${defaults.ipAddress}:${defaults.port}`;
-rusty.rcon.secret     = program.password ? program.password : `${defaults.port}`;
+rusty.forcecfg = program.forcecfg    ? true : false;
+
+rusty.manifest      = program.manifest ? program.manifest : defaults.manifest;
+rusty.timer         = program.timer    ? program.timer    : defaults.timer;
+rusty.config        = program.config   ? program.config   : defaults.config;
+rusty.rcon.server   = program.server   ? program.server   : defaults.server;
+rusty.rcon.password = program.password ? program.password : defaults.password;
+
+function setRusty(parms) {
+}
 
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
@@ -78,9 +80,19 @@ function readManifest(file) {
 function checkConfig(file) {
   return new Promise(function(resolve, reject) {
 
+    try {
+      var json = JSON.parse(fs.readFileSync(file, 'utf8'));
+      console.log(json);
+      console.log(json["nine"]);
+      console.log(json.nine);
+      console.log(Object.keys(json));
+    } catch(e) {
+      console.log(e)
+    }
+
     fs.stat(file, function(error, stats) {
-        if (stats.mtime.getTime() != rusty.configFileDate.getTime()) {
-          rusty.configFileDate = stats.mtime;
+        if (stats.mtime.getTime() != rusty.configDate.getTime()) {
+          rusty.configDate = stats.mtime;
           console.log("they are different");
         } else {
           console.log("they are the same");
@@ -109,9 +121,9 @@ var states = {
 //var rusty.operation = states.BOOT;
 rusty.operation = states.RUNNING;
 
-console.log(rusty['operation']);
-console.log(rusty['manifestFile']);
-console.log(rusty['rcon']['id']);
+//console.log(rusty['operation']);
+//console.log(rusty['manifest']);
+//console.log(rusty['rcon']['id']);
 
 (async ()=> {
   var rustBuildid;
@@ -121,12 +133,12 @@ console.log(rusty['rcon']['id']);
   while (rusty.operation != states.STOP) {
 
     // check if we need to read config values from file
-    await checkConfig(rusty.configFile);
+    await checkConfig(rusty.config);
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       try {
-        let retval  = await readManifest(rusty.manifestFile);
+        let retval  = await readManifest(rusty.manifest);
         rustBuildid = retval['buildid'];
         rustBranch  = retval['branch'];
         if (!rustBranch) rustBranch = "public";
