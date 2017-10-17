@@ -51,6 +51,8 @@ program
   .option('-f, --forcecfg',             `re-loading of config file overrides command-line options`)
   .parse(process.argv);
 
+rusty.config = program.config ? program.config : defaults.config;
+
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
     var data = '';
@@ -67,6 +69,7 @@ function readManifest(file) {
 
 function checkConfig(file) {
   return new Promise(function(resolve, reject) {
+    console.log(file);
     fs.stat(file, function(error, stats) {
         if (stats.mtime.getTime() != rusty.configDate.getTime()) {
           console.log("they are different");
@@ -78,21 +81,16 @@ function checkConfig(file) {
         //    console.log(json.nine);
             console.log(Object.keys(jsonConfig));
 
-            if (jsonConfig.hasOwnProperty("manifest") && !program.forcecfg) {
-              rusty.manifest = jsonConfig.manifest;
-            } else if (program.manifest) {
-              rusty.manifest = program.manifest;
-            } else {
-              rusty.manifest = defaults.manifest;
-            }
-
-            rusty.timer         = program.timer    ? program.timer    : defaults.timer;
-            rusty.config        = program.config   ? program.config   : defaults.config;
-            rusty.rcon.server   = program.server   ? program.server   : defaults.server;
-            rusty.rcon.password = program.password ? program.password : defaults.password;
+            console.log("manifest");
+            setConfig(jsonConfig, "manifest", "manifest");
+            console.log("timer");
+            setConfig(jsonConfig, "timer",    "timer");
+            console.log("server");
+            setConfig(jsonConfig, "rcon.server", "server");
+            console.log("password");
+            setConfig(jsonConfig, "rcon.password", "password");
 
             rusty.configDate = stats.mtime;
-
           } catch(e) {
             console.log(e)
           }
@@ -111,16 +109,22 @@ function checkConfig(file) {
   });
 }
 
-function setConfig(rustyKey, configKey) {
+function setConfig(jsonConfig, rustyKey, configKey) {
+//  console.log(Object.keys(jsonConfig));
+//  console.log(Object.keys(rusty));
+//  console.log(Object.keys(program));
+//  console.log(Object.keys(defaults));
   if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
-    rusty.rustyKey = jsonConfig.configKey;
-  } else if (program.key) {
-    rusty.rustyKey = program.configKey;
+    console.log("setting from config file");
+    rusty[rustyKey] = jsonConfig[configKey];
+  } else if (program[configKey]) {
+    console.log("setting from program option");
+    rusty[rustyKey] = program[configKey];
   } else {
-    rusty.rustyKey = defaults.configKey;
+    console.log("setting from default");
+    rusty[rustyKey] = defaults[configKey];
   }
 }
-
 
 var states = {
   STOP:    0,   // shut down rustynail and exit
