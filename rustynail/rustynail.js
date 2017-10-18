@@ -148,11 +148,12 @@ function printConfig() {
 }
 
 var states = {
-  STOP:    0,   // shut down rustynail and exit
-  BOOT:    1,   // startup operations
-  RUNNING: 2,   // normal operation. checking for updates and server availability
-  UPGRADE: 3,   // server upgrade need detected and announced
-  REBOOT:  4,   // server upgrade need detected and initiated
+  STOP:     0,   // shut down rustynail and exit
+  BOOT:     1,   // startup operations
+  RUNNING:  2,   // normal operation. checking for updates and server availability
+  ANNOUNCE: 3,   // server upgrade need detected and announcing
+  UPGRADE:  4,   // server upgrade need detected and announced
+  REBOOT:   5,   // server upgrade need detected and initiated
 }
 
 //var rusty.operation = states.BOOT;
@@ -189,10 +190,11 @@ rusty.operation = states.RUNNING;
     if (rusty.buildid != steamBuildid) {
 
       // new update ready from Facepunch
-      if (rusty.operation == states.RUNNING) {
+      if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
         if (announceTick < rusty.announceTicks  && rusty.announceText) {
+          rusty.operation = states.ANNOUNCE;
           console.log(`Buildid differs, announcing update`);
-          rusty.rcon.command = 'say "' + rusty.announceText + '"';
+          rusty.rcon.command = 'say "' + rusty.announceText + ' (' + (rusty.timer / 1000) * (rusty.announceTicks - announceTick) + ' seconds)"';
           try {
             let retval = await consoleapi.sendCommand(rusty.rcon);
           } catch(e) {
@@ -205,6 +207,7 @@ rusty.operation = states.RUNNING;
         }
       }
 
+      // ready to reboot for upgrade
       else if (rusty.operation == states.UPGRADE) {
         console.log(`Buildid differs, updating server`);
         rusty.rcon.command = 'quit';
@@ -216,6 +219,7 @@ rusty.operation = states.RUNNING;
         }
       }
 
+      // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
         rusty.rcon.command = 'version';
         try {
