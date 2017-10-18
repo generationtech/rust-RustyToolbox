@@ -57,6 +57,23 @@ rusty.config = program.config ? program.config : defaults.config;
 
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
+    try {
+      var data = '';
+      var readStream = fs.createReadStream(file, 'utf8');
+      readStream.on('data', function(chunk) {
+        data += chunk;
+      }).on('end', function() {
+        readStream.close();
+      });
+      resolve(data);
+    } catch(e) {
+      console.log(e)
+    }
+  });
+}
+
+function checkManifest(file) {
+//  return new Promise(function(resolve, reject) {
     // try not to waste time re-reading rust server manifest after booting
     // rustynail unless the modified date/time changes, which would indicate
     // the server was updated or re-installed outside of script control
@@ -66,18 +83,14 @@ function readManifest(file) {
 //      console.log(`stats.mtime: ${stats.mtime.getTime()}`);
       if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
         try {
-          var data = '';
-          var readStream = fs.createReadStream(file, 'utf8');
-          readStream.on('data', function(chunk) {
-            data += chunk;
-          }).on('end', function() {
-            readStream.close();
-            let manifest  = vdf.parse(data);
-            var branch = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
-//            console.log(`branch resolve1: ${branch}`);
-            resolve({ 'buildid': manifest['AppState']['buildid'], 'branch': branch });
-          });
+          let data     = await readManifest(file);
+          let manifest = vdf.parse(data);
+          console.log(manifest);
+          var branch   = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
+          var buildid  = manifest['AppState']['buildid'] ? manifest['AppState']['buildid'] : "public";
           rusty.manifestDate = stats.mtime;
+//          resolve({ 'buildid': buildid, 'branch': branch });
+          return({ 'buildid': buildid, 'branch': branch });
         } catch(e) {
           console.log(e)
         }
@@ -159,7 +172,8 @@ rusty.operation = states.RUNNING;
   while (rusty.operation != states.STOP) {
 
     // check if we need to read config values from file
-    await checkConfig(rusty.config);
+//    await checkConfig(rusty.config);
+    checkConfig(rusty.config);
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -168,9 +182,9 @@ rusty.operation = states.RUNNING;
 //        console.log(`buildid:       ${rusty.buildid}`);
 //        console.log(`branch:        ${rusty.branch}`);
 
-        let retval  = await readManifest(rusty.manifest);
-//        rustBuildid = retval['buildid'];
-//        rustBranch  = retval['branch'];
+        let retval  = await checkManifest(rusty.manifest);
+        rustBuildid = retval['buildid'];
+        rustBranch  = retval['branch'];
         rusty.buildid = retval['buildid'];
         rusty.branch  = retval['branch'];
 //        console.log(`buildid:       ${rusty.buildid}`);
