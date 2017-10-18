@@ -1,5 +1,7 @@
 {
   "manifest": "C:\\Rust\\Server\\rustds\\steamapps\\appmanifest_258550.acf",
-  "timer":    60000,
-  "server":   "127.0.0.1:28055"
+  "timer":    2000,
+  "server":   "127.0.0.1:28055",
+  "announceText": "Update released by Facepunch, server rebooting to update",
+  "announceTicks": 2
 }
