@@ -86,9 +86,11 @@ async function checkManifest(file) {
       try {
         var data      = await readManifest(file);
         let manifest  = vdf.parse(data);
-        rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
-        rusty.buildid = manifest['AppState']['buildid']               ? manifest['AppState']['buildid']               : rusty.buildid;
-        rusty.manifestDate = stats.mtime;
+        if (manifest) {
+          rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
+          rusty.buildid = manifest['AppState']['buildid']               ? manifest['AppState']['buildid']               : rusty.buildid;
+          rusty.manifestDate = stats.mtime;
+        }
       } catch(e) {
         console.log(e)
       }
@@ -179,7 +181,9 @@ rusty.operation = states.RUNNING;
         console.log(e)
       }
       try {
-        steamBuildid = await branchapi.getBuildID(defaults.appID, rusty.branch);
+        if (rusty.branch) {
+          steamBuildid = await branchapi.getBuildID(defaults.appID, rusty.branch);
+        }
       } catch(e) {
         console.log(e)
       }
