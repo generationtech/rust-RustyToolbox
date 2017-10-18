@@ -10,7 +10,6 @@ var defaults = {
     };
 
 var rcon = {
-      socket:   null,
       server:   null,
       password: null,
       command:  null,

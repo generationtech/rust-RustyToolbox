@@ -31,12 +31,15 @@ var rconObj = {
 
 // process operational values
 var rusty = {
-      rcon:       rconObj,
-      manifest:   null,
-      timer:      null,
-      operation:  null,
-      config:     null,
-      configDate: new Date(),
+      rcon:         rconObj,
+      manifest:     null,
+      manifestDate: new Date(),
+      buildid:      null,
+      branch:       null,
+      timer:        null,
+      operation:    null,
+      config:       null,
+      configDate:   new Date(),
     };
 
 program
@@ -52,90 +55,81 @@ program
 
 rusty.config = program.config ? program.config : defaults.config;
 
+
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
-    var data = '';
-    var readStream = fs.createReadStream(file, 'utf8');
-    readStream.on('data', function(chunk) {
-      data += chunk;
-    }).on('end', function() {
-      readStream.close();
-      let manifest = vdf.parse(data);
-      resolve({ 'buildid': manifest['AppState']['buildid'], 'branch': manifest['AppState']['UserConfig']['betakey'] });
-    });
+    try {
+      var data = '';
+      var readStream = fs.createReadStream(file, 'utf8');
+      readStream.on('data', function(chunk) {
+        data += chunk;
+      }).on('end', function() {
+        readStream.close();
+        resolve(data);
+      });
+    } catch(e) {
+      console.log(e)
+    }
   });
+}
+
+async function checkManifest(file) {
+  // try not to waste time re-reading rust server manifest after booting
+  // rustynail unless the modified date/time changes, which would indicate
+  // the server was updated or re-installed outside of script control
+  // while script was running
+  try {
+    var stats = fs.statSync(file)
+    if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
+      try {
+        var data = await readManifest(file);
+        let manifest = vdf.parse(data);
+        rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
+        rusty.buildid = manifest['AppState']['buildid']               ? manifest['AppState']['buildid']               : rusty.buildid;
+        rusty.manifestDate = stats.mtime;
+      } catch(e) {
+        console.log(e)
+      }
+    }
+  } catch(e) {
+    console.log(e)
+  }
 }
 
 function checkConfig(file) {
-  return new Promise(function(resolve, reject) {
-    fs.stat(file, function(error, stats) {
-        if (stats.mtime.getTime() != rusty.configDate.getTime()) {
-          try {
-            var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
+  var stats = fs.statSync(file)
+  if (stats.mtime.getTime() != rusty.configDate.getTime()) {
+    try {
+      var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-            if (jsonConfig.hasOwnProperty("manifest") && !program.forcecfg) {
-              rusty.manifest = jsonConfig.manifest;
-            } else if (program.manifest) {
-              rusty.manifest = program.manifest;
-            } else {
-              rusty.manifest = defaults.manifest;
-            }
+      setConfig(jsonConfig, rusty, "manifest");
+      setConfig(jsonConfig, rusty, "timer");
+      setConfig(jsonConfig, rusty.rcon, "server");
+      setConfig(jsonConfig, rusty.rcon, "password");
 
-            if (jsonConfig.hasOwnProperty("timer") && !program.forcecfg) {
-              rusty.timer = jsonConfig.timer;
-            } else if (program.timer) {
-              rusty.timer = program.timer;
-            } else {
-              rusty.timer = defaults.timer;
-            }
-
-            if (jsonConfig.hasOwnProperty("server") && !program.forcecfg) {
-              rusty.rcon.server = jsonConfig.server;
-            } else if (program.server) {
-              rusty.rcon.server = program.server;
-            } else {
-              rusty.rcon.server = defaults.server;
-            }
-
-            if (jsonConfig.hasOwnProperty("password") && !program.forcecfg) {
-              rusty.rcon.password = jsonConfig.password;
-            } else if (program.password) {
-              rusty.rcon.password = program.password;
-            } else {
-              rusty.rcon.password = defaults.password;
-            }
-
-            rusty.configDate = stats.mtime;
-
-            printConfig();
-
-          } catch(e) {
-            console.log(e)
-          }
-        }
-        resolve(stats);
-    });
-  });
-}
-
-/*
-function setConfig(jsonConfig, rustyKey, configKey) {
-//  console.log(`setting: ${rustyKey} ${configKey}`);
-  if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
-//    console.log("config file");
-    rusty[rustyKey] = jsonConfig[configKey];
-  } else if (program[configKey]) {
-//    console.log("program option");
-    rusty[rustyKey] = program[configKey];
-  } else {
-//    console.log("defaults");
-    rusty[rustyKey] = defaults[configKey];
+      rusty.configDate = stats.mtime;
+      printConfig();
+    } catch(e) {
+      console.log(e)
+    }
   }
 }
-*/
+
+function setConfig(jsonConfig, rustyVar, configKey) {
+  if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
+    rustyVar[configKey] = jsonConfig[configKey];
+  } else if (program[configKey]) {
+    rustyVar[configKey] = program[configKey];
+  } else {
+    rustyVar[configKey] = defaults[configKey];
+  }
+}
 
 function printConfig() {
   console.log(`manifest:      ${rusty.manifest}`);
+  console.log(`manifestDate:  ${rusty.manifestDate}`);
+  console.log(`buildid:       ${rusty.buildid}`);
+  console.log(`branch:        ${rusty.branch}`);
   console.log(`timer:         ${rusty.timer}`);
   console.log(`operation:     ${rusty.operation}`);
   console.log(`config:        ${rusty.config}`);
@@ -159,37 +153,35 @@ var states = {
 //var rusty.operation = states.BOOT;
 rusty.operation = states.RUNNING;
 
+//
+// MAIN
+//
 (async ()=> {
-  var rustBuildid;
-  var rustBranch;
   var steamBuildid;
 
   while (rusty.operation != states.STOP) {
 
     // check if we need to read config values from file
-    await checkConfig(rusty.config);
+    checkConfig(rusty.config);
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       try {
-        let retval  = await readManifest(rusty.manifest);
-        rustBuildid = retval['buildid'];
-        rustBranch  = retval['branch'];
-        if (!rustBranch) rustBranch = "public";
+        await checkManifest(rusty.manifest);
       } catch(e) {
         console.log(e)
       }
 
       try {
-        steamBuildid = await branchapi.getBuildID(defaults.appID, rustBranch);
+        steamBuildid = await branchapi.getBuildID(defaults.appID, rusty.branch);
       } catch(e) {
         console.log(e)
       }
-      console.log(`Server: ${rustBuildid} Steam: ${steamBuildid}`);
+      console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
     }
 
     // check if update is detected
-    if (rustBuildid != steamBuildid) {
+    if (rusty.buildid != steamBuildid) {
       if (rusty.operation == states.RUNNING) {
         rusty.operation = states.UPGRADE;
         console.log(`Buildid differs, updating server`);
