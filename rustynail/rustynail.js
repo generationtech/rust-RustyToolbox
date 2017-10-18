@@ -16,8 +16,8 @@ var defaults = {
       server:   `127.0.0.1:28016`,
       password: ``,
       config:   `rustytoolbox.json`,
-      announceText:  ``,
-      announceTicks: 5,
+      announce:  `Update released by Facepunch, server rebooting to update`,
+      ticks: 5,
     };
 
 // data used to communicate with the RCON interface
@@ -52,6 +52,8 @@ program
   .option('-p, --password <password>', `server password, defaults to blank password`)
   .option('-m, --manifest <path>',     `location of manifest file, defaults to ${defaults.manifest}`)
   .option('-t, --timer <directory>',   `check loop timer in milliseconds, defaults to ${defaults.timer}`)
+  .option('-a, --announce <message>',  `pre-upgrade in-game message, defaults to ${defaults.announce}`)
+  .option('-b, --ticks <number>',      `number of time to repear updade message, defaults to ${defaults.ticks}`)
   .option('-f, --forcecfg',            `re-loading of config file overrides command-line options`)
   .parse(process.argv);
 
@@ -108,8 +110,8 @@ function checkConfig(file) {
 
       setConfig(jsonConfig, rusty, "manifest");
       setConfig(jsonConfig, rusty, "timer");
-      setConfig(jsonConfig, rusty, "announceText");
-      setConfig(jsonConfig, rusty, "announceTicks");
+      setConfig(jsonConfig, rusty, "announce");
+      setConfig(jsonConfig, rusty, "ticks");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
@@ -132,14 +134,16 @@ function setConfig(jsonConfig, rustyVar, configKey) {
 }
 
 function printConfig() {
-  console.log(`manifest:      ${rusty.manifest}`);
-  console.log(`manifestDate:  ${rusty.manifestDate}`);
-  console.log(`buildid:       ${rusty.buildid}`);
-  console.log(`branch:        ${rusty.branch}`);
-  console.log(`timer:         ${rusty.timer}`);
-  console.log(`operation:     ${rusty.operation}`);
   console.log(`config:        ${rusty.config}`);
   console.log(`configDate:    ${rusty.configDate}`);
+  console.log(`manifest:      ${rusty.manifest}`);
+  console.log(`manifestDate:  ${rusty.manifestDate}`);
+  console.log(`timer:         ${rusty.timer}`);
+  console.log(`announce:      ${rusty.announce}`);
+  console.log(`ticks:         ${rusty.ticks}`);
+  console.log(`buildid:       ${rusty.buildid}`);
+  console.log(`branch:        ${rusty.branch}`);
+  console.log(`operation:     ${rusty.operation}`);
   console.log(`rcon.socket:   ${rusty.rcon.socket}`);
   console.log(`rcon.server:   ${rusty.rcon.server}`);
   console.log(`rcon.password: ${rusty.rcon.password}`);
@@ -165,7 +169,7 @@ rusty.operation = states.RUNNING;
 // MAIN
 //
 (async ()=> {
-  var steamBuildid;
+  var steamBuildid = null;
   var announceTick = 0;
 
   while (rusty.operation != states.STOP) {
@@ -182,7 +186,8 @@ rusty.operation = states.RUNNING;
       }
       try {
         if (rusty.branch) {
-          steamBuildid = await branchapi.getBuildID(defaults.appID, rusty.branch);
+          let retval = await branchapi.getBuildID(defaults.appID, rusty.branch);
+          if (retval) steamBuildid = retval;
         }
       } catch(e) {
         console.log(e)
@@ -195,10 +200,10 @@ rusty.operation = states.RUNNING;
 
       // new update ready from Facepunch
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
-        if (announceTick < rusty.announceTicks  && rusty.announceText) {
+        if (announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
           console.log(`Buildid differs, announcing update`);
-          rusty.rcon.command = 'say "' + rusty.announceText + ' (' + (rusty.timer / 1000) * (rusty.announceTicks - announceTick) + ' seconds)"';
+          rusty.rcon.command = 'say "' + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - announceTick) + ' seconds)"';
           try {
             let retval = await consoleapi.sendCommand(rusty.rcon);
           } catch(e) {

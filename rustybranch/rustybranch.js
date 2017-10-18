@@ -31,7 +31,11 @@ if (program.server && program.client) {
 (async ()=> {
   try{
     let retval = await branchAPI.getBuildID(appID, branch);
-    console.log(retval);
+    if (retval) {
+      console.log(retval);
+    } else {
+      console.log('branchAPI returned null for buildid');
+    }
   } catch(e) {
     console.log(e)
   }
