@@ -1,5 +1,5 @@
 const webSocket = require('ws');
-const util = require('util');
+const util      = require('util');
 
 module.exports.sendCommand = function(rconService) {
   return new Promise(function(resolve, reject) {
