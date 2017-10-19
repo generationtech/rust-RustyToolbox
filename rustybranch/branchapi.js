@@ -19,7 +19,12 @@ module.exports.getBuildID = function(appID, branch) {
         data = data.substring(dStart, data.lastIndexOf('AppID : ' + appID));
         // convert Valve Value Data Format to JS object
         data = vdf.parse(data);
-        resolve(data[appID]['depots']['branches'][branch]['buildid']);
+        try {
+          buildid = data[appID]['depots']['branches'][branch]['buildid'];
+        } catch(e) {
+          buildid = null;
+        }
+        resolve(buildid);
     });
   })
 }

@@ -19,8 +19,8 @@ module.exports.sendCommand = function(rconService) {
 
       var packet = {
         Identifier: identifier,
-        Message: msg,
-        Name: "WebRcon"
+        Message:    msg,
+        Name:       "WebRcon"
       };
 
       rconService.socket.send(JSON.stringify(packet));

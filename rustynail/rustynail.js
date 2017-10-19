@@ -16,6 +16,8 @@ var defaults = {
       server:   `127.0.0.1:28016`,
       password: ``,
       config:   `rustytoolbox.json`,
+      announce:  `Update released by Facepunch, server rebooting to update`,
+      ticks: 5,
     };
 
 // data used to communicate with the RCON interface
@@ -46,11 +48,13 @@ program
   .version('0.4.0')
   .usage('[options]')
   .option('-c, --config <file>' ,      `path and filename of optional config file`)
-  .option('-s, --server <host:port>' , `server IP address:port, default ${defaults.server}`)
-  .option('-p, --password <password>', `server password, defaults to blank password`)
-  .option('-m, --manifest <path>',     `location of manifest file, defaults to ${defaults.manifest}`)
-  .option('-t, --timer <directory>',   `check loop timer in milliseconds, defaults to ${defaults.timer}`)
-  .option('-f, --forcecfg',            `re-loading of config file overrides command-line options`)
+  .option('-s, --server <host:port>' , `server IP address:port`)
+  .option('-p, --password <password>', `server password`)
+  .option('-m, --manifest <path>',     `location of manifest file`)
+  .option('-t, --timer <directory>',   `check loop timer in milliseconds`)
+  .option('-a, --announce <message>',  `pre-upgrade in-game message`)
+  .option('-b, --ticks <number>',      `number of times to repeat update message`)
+  .option('-f, --forcecfg',            `config file overrides command-line options`)
   .parse(process.argv);
 
 rusty.config = program.config ? program.config : defaults.config;
@@ -82,11 +86,13 @@ async function checkManifest(file) {
     var stats = fs.statSync(file)
     if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
       try {
-        var data = await readManifest(file);
-        let manifest = vdf.parse(data);
-        rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
-        rusty.buildid = manifest['AppState']['buildid']               ? manifest['AppState']['buildid']               : rusty.buildid;
-        rusty.manifestDate = stats.mtime;
+        var data      = await readManifest(file);
+        let manifest  = vdf.parse(data);
+        if (manifest) {
+          rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
+          rusty.buildid = manifest['AppState']['buildid']               ? manifest['AppState']['buildid']               : rusty.buildid;
+          rusty.manifestDate = stats.mtime;
+        }
       } catch(e) {
         console.log(e)
       }
@@ -104,6 +110,8 @@ function checkConfig(file) {
 
       setConfig(jsonConfig, rusty, "manifest");
       setConfig(jsonConfig, rusty, "timer");
+      setConfig(jsonConfig, rusty, "announce");
+      setConfig(jsonConfig, rusty, "ticks");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
@@ -126,14 +134,16 @@ function setConfig(jsonConfig, rustyVar, configKey) {
 }
 
 function printConfig() {
-  console.log(`manifest:      ${rusty.manifest}`);
-  console.log(`manifestDate:  ${rusty.manifestDate}`);
-  console.log(`buildid:       ${rusty.buildid}`);
-  console.log(`branch:        ${rusty.branch}`);
-  console.log(`timer:         ${rusty.timer}`);
-  console.log(`operation:     ${rusty.operation}`);
   console.log(`config:        ${rusty.config}`);
   console.log(`configDate:    ${rusty.configDate}`);
+  console.log(`manifest:      ${rusty.manifest}`);
+  console.log(`manifestDate:  ${rusty.manifestDate}`);
+  console.log(`timer:         ${rusty.timer}`);
+  console.log(`announce:      ${rusty.announce}`);
+  console.log(`ticks:         ${rusty.ticks}`);
+  console.log(`buildid:       ${rusty.buildid}`);
+  console.log(`branch:        ${rusty.branch}`);
+  console.log(`operation:     ${rusty.operation}`);
   console.log(`rcon.socket:   ${rusty.rcon.socket}`);
   console.log(`rcon.server:   ${rusty.rcon.server}`);
   console.log(`rcon.password: ${rusty.rcon.password}`);
@@ -144,10 +154,12 @@ function printConfig() {
 }
 
 var states = {
-  STOP:    0,   // shut down rustynail and exit
-  BOOT:    1,   // startup operations
-  RUNNING: 2,   // normal operation. checking for updates and server availability
-  UPGRADE: 3,   // server upgrade need detected and initiated
+  STOP:     0,   // shut down rustynail and exit
+  BOOT:     1,   // startup operations
+  RUNNING:  2,   // normal operation. checking for updates and server availability
+  ANNOUNCE: 3,   // server upgrade need detected and announcing
+  UPGRADE:  4,   // server upgrade need detected and announced
+  REBOOT:   5,   // server upgrade need detected and initiated
 }
 
 //var rusty.operation = states.BOOT;
@@ -157,7 +169,8 @@ rusty.operation = states.RUNNING;
 // MAIN
 //
 (async ()=> {
-  var steamBuildid;
+  var steamBuildid = null;
+  var announceTick = 0;
 
   while (rusty.operation != states.STOP) {
 
@@ -171,9 +184,11 @@ rusty.operation = states.RUNNING;
       } catch(e) {
         console.log(e)
       }
-
       try {
-        steamBuildid = await branchapi.getBuildID(defaults.appID, rusty.branch);
+        if (rusty.branch) {
+          let retval = await branchapi.getBuildID(defaults.appID, rusty.branch);
+          if (retval) steamBuildid = retval;
+        }
       } catch(e) {
         console.log(e)
       }
@@ -182,16 +197,39 @@ rusty.operation = states.RUNNING;
 
     // check if update is detected
     if (rusty.buildid != steamBuildid) {
-      if (rusty.operation == states.RUNNING) {
-        rusty.operation = states.UPGRADE;
+
+      // new update ready from Facepunch
+      if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
+        if (announceTick < rusty.ticks  && rusty.announce) {
+          rusty.operation = states.ANNOUNCE;
+          console.log(`Buildid differs, announcing update`);
+          rusty.rcon.command = 'say "' + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - announceTick) + ' seconds)"';
+          try {
+            let retval = await consoleapi.sendCommand(rusty.rcon);
+          } catch(e) {
+            console.log('console command returned error: ' + e)
+          }
+          announceTick++;
+        } else {
+          announceTick = 0;
+          rusty.operation = states.UPGRADE;
+        }
+      }
+
+      // ready to reboot for upgrade
+      else if (rusty.operation == states.UPGRADE) {
         console.log(`Buildid differs, updating server`);
         rusty.rcon.command = 'quit';
         try {
+          rusty.operation = states.REBOOT;
           let retval = await consoleapi.sendCommand(rusty.rcon);
         } catch(e) {
           console.log('console command returned error: ' + e)
         }
-      } else if (rusty.operation == states.UPGRADE) {
+      }
+
+      // monitor for server to come back online
+      else if (rusty.operation == states.REBOOT) {
         rusty.rcon.command = 'version';
         try {
           let retval = await consoleapi.sendCommand(rusty.rcon);
@@ -203,6 +241,7 @@ rusty.operation = states.RUNNING;
           console.log('console command returned error: ' + e)
         }
       }
+
     }
     // snooze the process a bit
     await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));
