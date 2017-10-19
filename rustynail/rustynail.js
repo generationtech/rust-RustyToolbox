@@ -1,12 +1,36 @@
 #!/usr/bin/env node
 'use strict';
 
+//
+//  TBD
+//
+/*
+      Email notification:
+        -by email address list fed from config file or singular from command line
+
+      Server monitoring:
+        -during normal operation, check for correct server operaion by using
+         rcon "version"
+        -give option to extend interval by X ticks of regular timer
+        -advanced function to kill/restart rust server. can be used during
+         startup for initial rust server run
+
+      Before/after scripts
+        -provide hooks to run generic user-entered command line:
+            -before upgrade run
+            -after upgrade run
+
+      Change seed on 1st Thursday upgrade
+*/
+
+
 // get external libraries
 var fs         = require('fs');
 var vdf        = require('vdf');
 var program    = require('commander');
 var branchapi  = require('../rustybranch/branchapi');
 var consoleapi = require('../rustyconsole/consoleapi');
+var nodemailer = require('nodemailer');
 
 // setup some default values
 var defaults = {
@@ -51,19 +75,29 @@ var rusty = {
   operation:    null,
   config:       null,
   configDate:   new Date(),
+  emuser:       null,
+  emapass:      null,
+  emupdate:     null,
+  emunavail:    null,
+  emailUpdate:  null,
+  emailUnavail: null,
 };
 
 program
   .version('0.4.0')
   .usage('[options]')
-  .option('-c, --config <file>' ,      `path and filename of optional config file`)
-  .option('-s, --server <host:port>' , `server IP address:port`)
-  .option('-p, --password <password>', `server password`)
-  .option('-m, --manifest <path>',     `location of manifest file`)
-  .option('-t, --timer <directory>',   `check loop timer in milliseconds`)
-  .option('-a, --announce <message>',  `pre-upgrade in-game message`)
-  .option('-b, --ticks <number>',      `number of times to repeat update message`)
-  .option('-f, --forcecfg',            `config file overrides command-line options`)
+  .option('-c, --config <file>' ,         `path and filename of optional config file`)
+  .option('-s, --server <host:port>' ,    `server IP address:port`)
+  .option('-p, --password <password>',    `server password`)
+  .option('-m, --manifest <path>',        `location of manifest file`)
+  .option('-t, --timer <directory>',      `check loop timer in milliseconds`)
+  .option('-a, --announce <message>',     `pre-upgrade in-game message`)
+  .option('-b, --ticks <number>',         `number of times to repeat update message`)
+  .option('-u, --emuser <email address>', `email address for sending email`)
+  .option('-v, --emapass <password>',     `email user password`)
+  .option('-w, --emupdate',               `enable sending email for updates`)
+  .option('-x, --emunavail',              `enable sending email for unavailability`)
+  .option('-f, --forcecfg',               `config file overrides command-line options`)
   .parse(process.argv);
 
 rusty.config    = program.config ? program.config : defaults.config;
@@ -80,6 +114,9 @@ rusty.operation = states.RUNNING;
 
     // check if we need to read config values from file
     checkConfig(rusty.config);
+
+    sendEmails(rusty.emailUpdate, "server updating",    "Rust update available, server rebooting to update");
+    sendEmails(rusty.emailUnavail,"server unavailable", "Rust server unavailable, check status");
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -130,7 +167,7 @@ rusty.operation = states.RUNNING;
         } catch(e) {
           console.log('console command returned error: ' + e)
         }
-*/        
+*/
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
@@ -213,6 +250,12 @@ function checkConfig(file) {
       setConfig(jsonConfig, rusty, "timer");
       setConfig(jsonConfig, rusty, "announce");
       setConfig(jsonConfig, rusty, "ticks");
+      setConfig(jsonConfig, rusty, "emuser");
+      setConfig(jsonConfig, rusty, "emapass");
+      setConfig(jsonConfig, rusty, "emupdate");
+      setConfig(jsonConfig, rusty, "emunavail");
+      setConfig(jsonConfig, rusty, "emailUpdate");
+      setConfig(jsonConfig, rusty, "emailUnavail");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
@@ -242,6 +285,12 @@ function printConfig() {
   console.log(`timer:         ${rusty.timer}`);
   console.log(`announce:      ${rusty.announce}`);
   console.log(`ticks:         ${rusty.ticks}`);
+  console.log(`emuser:        ${rusty.emuser}`);
+  console.log(`emapass:       ${rusty.emapass}`);
+  console.log(`emupdate:      ${rusty.emupdate}`);
+  console.log(`emunavail:     ${rusty.emunavail}`);
+  console.log(`emailUpdate:   ${rusty.emailUpdate}`);
+  console.log(`emailUnavail:  ${rusty.emailUnavail}`);
   console.log(`buildid:       ${rusty.buildid}`);
   console.log(`branch:        ${rusty.branch}`);
   console.log(`operation:     ${rusty.operation}`);
@@ -252,4 +301,37 @@ function printConfig() {
   console.log(`rcon.id:       ${rusty.rcon.id}`);
   console.log(`rcon.json:     ${rusty.rcon.json}`);
   console.log(`rcon.quiet:    ${rusty.rcon.quiet}`);
+}
+
+function sendEmail(eaddress, esubject, emessage) {
+  var transporter = nodemailer.createTransport({
+    host:   'smtp.gmail.com',
+    port:   465,
+    secure: true,
+    auth: {
+      user: rusty.emuser,
+      pass: rusty.emapass
+    }
+  });
+  var mailOptions = {
+    from:    rusty.emuser,
+    to:      eaddress,
+    subject: esubject,
+    text:    emessage
+  };
+  transporter.sendMail(mailOptions, function(error, info){
+    if (error) {
+      console.log(error);
+    } else {
+      console.log('Emailed: ' + eaddress);
+//      console.log('Response:      ' + info.response);
+    }
+  });
+}
+
+function sendEmails(elist, esubject, emessage)
+{
+  elist.forEach(function(element) {
+      sendEmail(element, esubject, emessage);
+  });
 }
