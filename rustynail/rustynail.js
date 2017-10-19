@@ -7,6 +7,7 @@
 /*
       Email notification:
         -by email address list fed from config file or singular from command line
+        -emails for (un)availability
 
       Server monitoring:
         -during normal operation, check for correct server operaion by using
@@ -21,8 +22,9 @@
             -after upgrade run
 
       Change seed on 1st Thursday upgrade
-*/
 
+      Track batch/cmd file used to launch Rust server
+*/
 
 // get external libraries
 var fs         = require('fs');
@@ -77,8 +79,8 @@ var rusty = {
   configDate:   new Date(),
   emuser:       null,
   emapass:      null,
-  emupdate:     null,
-  emunavail:    null,
+  emupdate:     false,
+  emunavail:    false,
   emailUpdate:  null,
   emailUnavail: null,
 };
@@ -115,8 +117,7 @@ rusty.operation = states.RUNNING;
     // check if we need to read config values from file
     checkConfig(rusty.config);
 
-    sendEmails(rusty.emailUpdate, "server updating",    "Rust update available, server rebooting to update");
-    sendEmails(rusty.emailUnavail,"server unavailable", "Rust server unavailable, check status");
+//    sendEmails(rusty.emailUnavail,"Server unavailable", "Server unavailable");
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -168,6 +169,7 @@ rusty.operation = states.RUNNING;
           console.log('console command returned error: ' + e)
         }
 */
+        if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server rebooting for update", "Server rebooting for update");
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
@@ -183,6 +185,7 @@ rusty.operation = states.RUNNING;
         try {
           let retval = await consoleapi.sendCommand(rusty.rcon);
           if (!retval['error']) {
+            if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server back online after update", "Server back online after update");
             console.log('Server back online after update');
             rusty.operation = states.RUNNING;
           }

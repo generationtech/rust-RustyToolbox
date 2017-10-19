@@ -5,5 +5,7 @@
   "announce":     "New server version released by Facepunch, rebooting to update",
   "ticks":        2,
   "emailUpdate":  [ "" ],
-  "emailUnavail": [ "" ]
+  "emailUnavail": [ "" ],
+  "emupdate":     "false",
+  "emunavail":    "false"
 }
