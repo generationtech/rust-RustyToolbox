@@ -48,13 +48,13 @@ program
   .version('0.4.0')
   .usage('[options]')
   .option('-c, --config <file>' ,      `path and filename of optional config file`)
-  .option('-s, --server <host:port>' , `server IP address:port, default ${defaults.server}`)
-  .option('-p, --password <password>', `server password, defaults to blank password`)
-  .option('-m, --manifest <path>',     `location of manifest file, defaults to ${defaults.manifest}`)
-  .option('-t, --timer <directory>',   `check loop timer in milliseconds, defaults to ${defaults.timer}`)
-  .option('-a, --announce <message>',  `pre-upgrade in-game message, defaults to ${defaults.announce}`)
-  .option('-b, --ticks <number>',      `number of time to repear updade message, defaults to ${defaults.ticks}`)
-  .option('-f, --forcecfg',            `re-loading of config file overrides command-line options`)
+  .option('-s, --server <host:port>' , `server IP address:port`)
+  .option('-p, --password <password>', `server password`)
+  .option('-m, --manifest <path>',     `location of manifest file`)
+  .option('-t, --timer <directory>',   `check loop timer in milliseconds`)
+  .option('-a, --announce <message>',  `pre-upgrade in-game message`)
+  .option('-b, --ticks <number>',      `number of times to repeat update message`)
+  .option('-f, --forcecfg',            `config file overrides command-line options`)
   .parse(process.argv);
 
 rusty.config = program.config ? program.config : defaults.config;
