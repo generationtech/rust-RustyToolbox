@@ -11,6 +11,7 @@ module.exports.sendCommand = function(rconService) {
     }
 
     rconService.SendMessage = function(msg, identifier) {
+      console.log("sending message");
       if (rconService.socket === null || !rconService.socket.readyState === 1)
         return;
 
@@ -25,8 +26,9 @@ module.exports.sendCommand = function(rconService) {
 
       rconService.socket.send(JSON.stringify(packet));
     };
-
+console.log("opening socket connection");
     rconService.socket = new webSocket("ws://" + rconService.server + "/" + rconService.password);
+console.log("success opening socket connection");
 
     rconService.socket.onmessage = function(e) {
       let retval = null;

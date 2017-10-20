@@ -138,6 +138,7 @@ rusty.operation = states.RUNNING;
         console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
         console.log("server offline");
+        console.log("unavail: " + unavail + " rusty.unavail: " + rusty.unavail + " rusty.emunavail: " + rusty.emunavail);
         unavail++;
         if (unavail > rusty.unavail) {
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server not responding", "Server not responding");
@@ -199,6 +200,8 @@ rusty.operation = states.RUNNING;
     }
     // snooze the process a bit
     await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));
+    console.log("");
+    console.log("");
   }
   process.exit(0);
 })();
@@ -342,15 +345,45 @@ function sendEmails(elist, esubject, emessage) {
   });
 }
 
+
 async function checkStatus() {
   rusty.rcon.command = 'version';
+  var retval;
   try {
-    let retval = await consoleapi.sendCommand(rusty.rcon);
-    if (!retval['error']) {
-      return true;
-    }
+    retval = await status();
+    console.log("retval: " + retval);
   } catch(e) {
     console.log('console command returned error: ' + e)
   }
-  return false;
+  console.log("returning default online");
+  return true;
+}
+
+async function status() {
+  var retval;
+  return await Promise.race([
+        retval = consoleapi.sendCommand(rusty.rcon),
+//      new Promise((resolve, reject) => setTimeout(() => resolve(), 2000)),
+      //new Promise((resolve, reject) => setTimeout(() => resolve(), 1000))
+//      "text"
+//    new Promise(function(resolve, reject) { setTimeout(resolve, 1500, 'five'); }),
+    new Promise(function(resolve, reject) { setTimeout(reject, 700, 'six');   })
+///    ]).catch(function(err) {
+//        console.log("error: " + err);
+      // errors in res1, res2, res3 and the timeout will be caught here
+  //}).then(function(value) {
+  ]).then(function(value, reason) {
+//      console.log(retval);
+  //    console.log(retval['error']);
+    //  if (!retval['error']) {
+        console.log("returning online");
+        return true;
+//        resolve(true);
+//      }
+    }, function(value, reason) {
+//      console.log("timeout wins");
+      console.log("returning offline");
+//      resolve(false);
+      return false;
+    });
 }
