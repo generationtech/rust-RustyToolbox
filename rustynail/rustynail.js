@@ -120,8 +120,12 @@ rusty.operation = states.RUNNING;
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {
+        if (unavail >= rusty.unavail) {
+          console.log("Server back online after being unresponsive");
+          if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server back online after being unresponsive", "Server back online after being unresponsive");
+        }
         unavail = 0;
-        console.log("server online");
+//        console.log("server online");
         try {
           await checkManifest(rusty.manifest);
         } catch(e) {
@@ -137,12 +141,10 @@ rusty.operation = states.RUNNING;
         }
         console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
-        console.log("server offline");
-        console.log("unavail: " + unavail + " rusty.unavail: " + rusty.unavail + " rusty.emunavail: " + rusty.emunavail);
         unavail++;
-        if (unavail > rusty.unavail) {
+        console.log("Server not responding (" + unavail + " attempts)");
+        if (unavail == rusty.unavail) {
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server not responding", "Server not responding");
-          console.log('Server not responding');
         }
       }
     }
@@ -191,7 +193,7 @@ rusty.operation = states.RUNNING;
 
       // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
-        if (checkStatus()) {
+        if (await checkStatus()) {
           if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server back online after update", "Server back online after update");
           console.log('Server back online after update');
           rusty.operation = states.RUNNING;
@@ -350,47 +352,31 @@ async function checkStatus() {
   var retval;
   try {
     retval = await status();
-    console.log("retval: " + retval);
-    console.log("checkStatus returning retval: " +  retval);
+//    console.log("retval: " + retval);
+//    console.log("checkStatus returning retval: " +  retval);
     return retval;
   } catch(e) {
     console.log('console command returned error: ' + e)
   }
-  console.log("checkStatus returning false");
+//  console.log("checkStatus returning false");
   return false;
 }
 
 async function status() {
-//  var retval;
   return await Promise.race([
-        consoleapi.sendCommand(rusty.rcon),
-//      new Promise((resolve, reject) => setTimeout(() => resolve(), 2000)),
-      //new Promise((resolve, reject) => setTimeout(() => resolve(), 1000))
-//      "text"
-//    new Promise(function(resolve, reject) { setTimeout(resolve, 1500, 'five'); }),
-    new Promise(function(resolve, reject) { setTimeout(reject, 700, 'six');   })
-///    ]).catch(function(err) {
-//        console.log("error: " + err);
-      // errors in res1, res2, res3 and the timeout will be caught here
-  //}).then(function(value) {
+    consoleapi.sendCommand(rusty.rcon),
+    new Promise(function(resolve, reject) { setTimeout(reject, 2000); })
   ]).then(function(value, reason) {
-//      console.log(retval);
-  //    console.log(retval['error']);
-  //  if (!retval['error']) {
     if (!value['error']) {
-        console.log("got message result, returning online");
+//        console.log("got message result, returning online");
         return true;
       }
       else {
-        console.log("got message result, returning offline");
+//        console.log("got message result, returning offline");
         return false;
       }
-//        resolve(true);
-//      }
     }, function(value, reason) {
-//      console.log("timeout wins");
-      console.log("message timeout, returning offline");
-//      resolve(false);
+//      console.log("message timeout, returning offline");
       return false;
     });
 }
