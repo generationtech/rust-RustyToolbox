@@ -7,5 +7,6 @@
   "emailUpdate":  [ "" ],
   "emailUnavail": [ "" ],
   "emupdate":     "false",
-  "emunavail":    "false"
+  "emunavail":    "false",
+  "unavail":      15
 }

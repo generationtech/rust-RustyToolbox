@@ -16,11 +16,6 @@
         -advanced function to kill/restart rust server. can be used during
          startup for initial rust server run
 
-      Before/after scripts
-        -provide hooks to run generic user-entered command line:
-            -before upgrade run
-            -after upgrade run
-
       Change seed on 1st Thursday upgrade
 
       Track batch/cmd file used to launch Rust server
@@ -43,7 +38,7 @@ var defaults = {
   password: ``,
   config:   `rustytoolbox.json`,
   announce: `Update released by Facepunch, server rebooting to update`,
-  ticks: 5,
+  ticks:    5,
 };
 
 var states = {
@@ -83,6 +78,7 @@ var rusty = {
   emunavail:    false,
   emailUpdate:  null,
   emailUnavail: null,
+  unavail:      10,
 };
 
 program
@@ -93,6 +89,7 @@ program
   .option('-p, --password <password>',    `server password`)
   .option('-m, --manifest <path>',        `location of manifest file`)
   .option('-t, --timer <directory>',      `check loop timer in milliseconds`)
+  .option('-n, --unavail <number>',       `unavailability ticks`)
   .option('-a, --announce <message>',     `pre-upgrade in-game message`)
   .option('-b, --ticks <number>',         `number of times to repeat update message`)
   .option('-u, --emuser <email address>', `email address for sending email`)
@@ -111,6 +108,7 @@ rusty.operation = states.RUNNING;
 (async ()=> {
   var steamBuildid = null;
   var announceTick = 0;
+  var unavail      = 0;
 
   while (rusty.operation != states.STOP) {
 
@@ -121,20 +119,31 @@ rusty.operation = states.RUNNING;
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
-      try {
-        await checkManifest(rusty.manifest);
-      } catch(e) {
-        console.log(e)
-      }
-      try {
-        if (rusty.branch) {
-          let retval = await branchapi.getBuildID(defaults.appID, rusty.branch);
-          if (retval) steamBuildid = retval;
+      if (await checkStatus()) {
+        unavail = 0;
+        console.log("server online");
+        try {
+          await checkManifest(rusty.manifest);
+        } catch(e) {
+          console.log(e)
         }
-      } catch(e) {
-        console.log(e)
+        try {
+          if (rusty.branch) {
+            let retval = await branchapi.getBuildID(defaults.appID, rusty.branch);
+            if (retval) steamBuildid = retval;
+          }
+        } catch(e) {
+          console.log(e)
+        }
+        console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
+      } else {
+        console.log("server offline");
+        unavail++;
+        if (unavail > rusty.unavail) {
+          if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server not responding", "Server not responding");
+          console.log('Server not responding');
+        }
       }
-      console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
     }
 
     // check if update is detected
@@ -181,19 +190,12 @@ rusty.operation = states.RUNNING;
 
       // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
-        rusty.rcon.command = 'version';
-        try {
-          let retval = await consoleapi.sendCommand(rusty.rcon);
-          if (!retval['error']) {
-            if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server back online after update", "Server back online after update");
-            console.log('Server back online after update');
-            rusty.operation = states.RUNNING;
-          }
-        } catch(e) {
-          console.log('console command returned error: ' + e)
+        if (checkStatus()) {
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server back online after update", "Server back online after update");
+          console.log('Server back online after update');
+          rusty.operation = states.RUNNING;
         }
       }
-
     }
     // snooze the process a bit
     await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));
@@ -259,6 +261,7 @@ function checkConfig(file) {
       setConfig(jsonConfig, rusty, "emunavail");
       setConfig(jsonConfig, rusty, "emailUpdate");
       setConfig(jsonConfig, rusty, "emailUnavail");
+      setConfig(jsonConfig, rusty, "unavail");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
@@ -294,6 +297,7 @@ function printConfig() {
   console.log(`emunavail:     ${rusty.emunavail}`);
   console.log(`emailUpdate:   ${rusty.emailUpdate}`);
   console.log(`emailUnavail:  ${rusty.emailUnavail}`);
+  console.log(`unavail:       ${rusty.unavail}`);
   console.log(`buildid:       ${rusty.buildid}`);
   console.log(`branch:        ${rusty.branch}`);
   console.log(`operation:     ${rusty.operation}`);
@@ -332,9 +336,21 @@ function sendEmail(eaddress, esubject, emessage) {
   });
 }
 
-function sendEmails(elist, esubject, emessage)
-{
+function sendEmails(elist, esubject, emessage) {
   elist.forEach(function(element) {
       sendEmail(element, esubject, emessage);
   });
+}
+
+async function checkStatus() {
+  rusty.rcon.command = 'version';
+  try {
+    let retval = await consoleapi.sendCommand(rusty.rcon);
+    if (!retval['error']) {
+      return true;
+    }
+  } catch(e) {
+    console.log('console command returned error: ' + e)
+  }
+  return false;
 }
