@@ -345,24 +345,25 @@ function sendEmails(elist, esubject, emessage) {
   });
 }
 
-
 async function checkStatus() {
   rusty.rcon.command = 'version';
   var retval;
   try {
     retval = await status();
     console.log("retval: " + retval);
+    console.log("checkStatus returning retval: " +  retval);
+    return retval;
   } catch(e) {
     console.log('console command returned error: ' + e)
   }
-  console.log("returning default online");
-  return true;
+  console.log("checkStatus returning false");
+  return false;
 }
 
 async function status() {
-  var retval;
+//  var retval;
   return await Promise.race([
-        retval = consoleapi.sendCommand(rusty.rcon),
+        consoleapi.sendCommand(rusty.rcon),
 //      new Promise((resolve, reject) => setTimeout(() => resolve(), 2000)),
       //new Promise((resolve, reject) => setTimeout(() => resolve(), 1000))
 //      "text"
@@ -375,14 +376,20 @@ async function status() {
   ]).then(function(value, reason) {
 //      console.log(retval);
   //    console.log(retval['error']);
-    //  if (!retval['error']) {
-        console.log("returning online");
+  //  if (!retval['error']) {
+    if (!value['error']) {
+        console.log("got message result, returning online");
         return true;
+      }
+      else {
+        console.log("got message result, returning offline");
+        return false;
+      }
 //        resolve(true);
 //      }
     }, function(value, reason) {
 //      console.log("timeout wins");
-      console.log("returning offline");
+      console.log("message timeout, returning offline");
 //      resolve(false);
       return false;
     });
