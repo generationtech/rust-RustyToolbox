@@ -202,8 +202,6 @@ rusty.operation = states.RUNNING;
     }
     // snooze the process a bit
     await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));
-    console.log("");
-    console.log("");
   }
   process.exit(0);
 })();
