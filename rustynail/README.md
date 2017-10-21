@@ -26,4 +26,33 @@ Options:
   -h, --help                    output usage information
 ```
 
-Uses the rustytoolbox config file and if during rustynail operation the config file changes, the program will re-read the config file and make adjustments as needed.
+Uses the `rustytoolbox.json` config file and if during rustynail operation the config file changes, the program will re-read the config file and make adjustments as needed.
+
+#### Rust server:
+The Rust server needs to be started with a \*.bat file that infinite loops through update-run-update sequence for RustyNail to work. Also, runs the update twice, because occasionally, the first run of the Steam update process leaves this file missing: `C:\Rust\Server\rustds\steamapps\appmanifest_258550.acf`
+
+`Run_DS.bat`
+```
+echo off
+:start
+
+cd steam
+rem steamcmd.exe +runscript ../update_script.txt
+rem steamcmd.exe +runscript ../update_script.txt
+cd ..
+
+cd rustds
+RustDedicated.exe <with whatever your normal command-line options are>
+cd ../
+
+goto start
+```
+`update_script.txt`
+```
+@ShutdownOnFailedCommand 1
+@NoPromptForPassword 1
+login anonymous
+force_install_dir ../rustds
+app_update 258550 validate
+quit
+```
