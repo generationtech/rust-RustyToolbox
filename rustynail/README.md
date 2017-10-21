@@ -37,8 +37,8 @@ echo off
 :start
 
 cd steam
-rem steamcmd.exe +runscript ../update_script.txt
-rem steamcmd.exe +runscript ../update_script.txt
+steamcmd.exe +runscript ../update_script.txt
+steamcmd.exe +runscript ../update_script.txt
 cd ..
 
 cd rustds
