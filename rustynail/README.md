@@ -29,7 +29,7 @@ Options:
 Uses the `rustytoolbox.json` config file and if during rustynail operation the config file changes, the program will re-read the config file and make adjustments as needed.
 
 #### Rust server:
-The Rust server needs to be started with a \*.bat file that infinite loops through update-run-update sequence for RustyNail to work. Also, need to run the update twice in that file, because occasionally, the first run of the Steam update process leaves this file missing: `C:\Rust\Server\rustds\steamapps\appmanifest_258550.acf`
+The Rust server needs to be started with a \*.bat file that infinite loops through update-run-update sequence for RustyNail to work. Also, runs the update twice, because occasionally, the first run of the Steam update process leaves this file missing: `C:\Rust\Server\rustds\steamapps\appmanifest_258550.acf`
 
 `Run_DS.bat`
 ```
