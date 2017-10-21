@@ -73,7 +73,7 @@ var rusty = {
   config:       null,
   configDate:   new Date(),
   emuser:       null,
-  emapass:      null,
+  empass:      null,
   emupdate:     false,
   emunavail:    false,
   emailUpdate:  null,
@@ -93,7 +93,7 @@ program
   .option('-a, --announce <message>',     `pre-upgrade in-game message`)
   .option('-b, --ticks <number>',         `number of times to repeat update message`)
   .option('-u, --emuser <email address>', `email address for sending email`)
-  .option('-v, --emapass <password>',     `email user password`)
+  .option('-v, --empass <password>',     `email user password`)
   .option('-w, --emupdate',               `enable sending email for updates`)
   .option('-x, --emunavail',              `enable sending email for unavailability`)
   .option('-f, --forcecfg',               `config file overrides command-line options`)
@@ -259,7 +259,7 @@ function checkConfig(file) {
       setConfig(jsonConfig, rusty, "announce");
       setConfig(jsonConfig, rusty, "ticks");
       setConfig(jsonConfig, rusty, "emuser");
-      setConfig(jsonConfig, rusty, "emapass");
+      setConfig(jsonConfig, rusty, "empass");
       setConfig(jsonConfig, rusty, "emupdate");
       setConfig(jsonConfig, rusty, "emunavail");
       setConfig(jsonConfig, rusty, "emailUpdate");
@@ -295,7 +295,7 @@ function printConfig() {
   console.log(`announce:      ${rusty.announce}`);
   console.log(`ticks:         ${rusty.ticks}`);
   console.log(`emuser:        ${rusty.emuser}`);
-  console.log(`emapass:       ${rusty.emapass}`);
+  console.log(`empass:        ${rusty.empass}`);
   console.log(`emupdate:      ${rusty.emupdate}`);
   console.log(`emunavail:     ${rusty.emunavail}`);
   console.log(`emailUpdate:   ${rusty.emailUpdate}`);
@@ -320,7 +320,7 @@ function sendEmail(eaddress, esubject, emessage) {
     secure: true,
     auth: {
       user: rusty.emuser,
-      pass: rusty.emapass
+      pass: rusty.empass
     }
   });
   var mailOptions = {

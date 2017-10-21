@@ -26,7 +26,24 @@ Options:
   -h, --help                    output usage information
 ```
 
-Uses the `rustytoolbox.json` config file and if during rustynail operation the config file changes, the program will re-read the config file and make adjustments as needed.
+Uses a config file if present. If during RustyNail operation the config file changes, the program will re-read the config file and make adjustments as needed. Any command-line options override config file entries unless `--forcecfg` is specified
+
+`rustytoolbox.json`
+
+```
+{
+  "manifest":     "C:\\Rust\\Server\\rustds\\steamapps\\appmanifest_258550.acf",
+  "timer":        60000,
+  "server":       "127.0.0.1:28055",
+  "announce":     "New server version released by Facepunch, rebooting to update",
+  "ticks":        2,
+  "emailUpdate":  [ "" ],
+  "emailUnavail": [ "" ],
+  "emupdate":     "false",
+  "emunavail":    "false",
+  "unavail":      15
+}
+```
 
 #### Rust server:
 The Rust server needs to be started with a \*.bat file that infinite loops through update-run-update sequence for RustyNail to work. Also, runs the update twice, because occasionally, the first run of the Steam update process leaves this file missing: `C:\Rust\Server\rustds\steamapps\appmanifest_258550.acf`
