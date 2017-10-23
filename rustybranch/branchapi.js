@@ -10,7 +10,7 @@ module.exports.getBuildID = function(appID, branch) {
     });
     // steamcmd has problem with stdout and redirection in general where output is truncated.
     // Must run app_info_print twice to get full output from full run, then must remove the
-    // the extra half at the end ourselves
+    // the extra half at the end ourselves (linux steamcmd don't do this :) )
     cp.exec('steam\\steamcmd +login anonymous +app_info_print "' + appID + '" +app_info_print "' + appID + '" +quit',
       function(error, data) {
         // cut the junk from front of return data

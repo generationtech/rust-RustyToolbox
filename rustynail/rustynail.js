@@ -5,14 +5,7 @@
 //  TBD
 //
 /*
-      Email notification:
-        -by email address list fed from config file or singular from command line
-        -emails for (un)availability
-
       Server monitoring:
-        -during normal operation, check for correct server operaion by using
-         rcon "version"
-        -give option to extend interval by X ticks of regular timer
         -advanced function to kill/restart rust server. can be used during
          startup for initial rust server run
 
@@ -39,6 +32,8 @@ var defaults = {
   config:   `rustytoolbox.json`,
   announce: `Update released by Facepunch, server rebooting to update`,
   ticks:    5,
+  emuser:   null,
+  empass:   null,
 };
 
 var states = {
@@ -73,7 +68,7 @@ var rusty = {
   config:       null,
   configDate:   new Date(),
   emuser:       null,
-  empass:      null,
+  empass:       null,
   emupdate:     false,
   emunavail:    false,
   emailUpdate:  null,
@@ -93,7 +88,7 @@ program
   .option('-a, --announce <message>',     `pre-upgrade in-game message`)
   .option('-b, --ticks <number>',         `number of times to repeat update message`)
   .option('-u, --emuser <email address>', `email address for sending email`)
-  .option('-v, --empass <password>',     `email user password`)
+  .option('-v, --empass <password>',      `email user password`)
   .option('-w, --emupdate',               `enable sending email for updates`)
   .option('-x, --emunavail',              `enable sending email for unavailability`)
   .option('-f, --forcecfg',               `config file overrides command-line options`)
@@ -115,8 +110,6 @@ rusty.operation = states.RUNNING;
     // check if we need to read config values from file
     checkConfig(rusty.config);
 
-//    sendEmails(rusty.emailUnavail,"Server unavailable", "Server unavailable");
-
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {
@@ -125,7 +118,6 @@ rusty.operation = states.RUNNING;
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server back online after being unresponsive", "Server back online after being unresponsive");
         }
         unavail = 0;
-//        console.log("server online");
         try {
           await checkManifest(rusty.manifest);
         } catch(e) {
@@ -142,7 +134,7 @@ rusty.operation = states.RUNNING;
         console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
         unavail++;
-        console.log("Server not responding (" + unavail + " attempts)");
+        console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
         if (unavail == rusty.unavail) {
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server not responding", "Server not responding");
         }
@@ -173,14 +165,6 @@ rusty.operation = states.RUNNING;
       // ready to reboot for upgrade
       if (rusty.operation == states.UPGRADE) {
         console.log(`Buildid differs, updating server`);
-/*
-        rusty.rcon.command = 'say "Rebooting server now for update"';
-        try {
-          let retval = await consoleapi.sendCommand(rusty.rcon);
-        } catch(e) {
-          console.log('console command returned error: ' + e)
-        }
-*/
         if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server rebooting for update", "Server rebooting for update");
         rusty.rcon.command = 'quit';
         try {
@@ -287,6 +271,7 @@ function setConfig(jsonConfig, rustyVar, configKey) {
 }
 
 function printConfig() {
+  console.log();
   console.log(`config:        ${rusty.config}`);
   console.log(`configDate:    ${rusty.configDate}`);
   console.log(`manifest:      ${rusty.manifest}`);
@@ -311,6 +296,7 @@ function printConfig() {
   console.log(`rcon.id:       ${rusty.rcon.id}`);
   console.log(`rcon.json:     ${rusty.rcon.json}`);
   console.log(`rcon.quiet:    ${rusty.rcon.quiet}`);
+  console.log();
 }
 
 function sendEmail(eaddress, esubject, emessage) {
@@ -334,7 +320,6 @@ function sendEmail(eaddress, esubject, emessage) {
       console.log(error);
     } else {
       console.log('Emailed: ' + eaddress);
-//      console.log('Response:      ' + info.response);
     }
   });
 }
@@ -350,13 +335,10 @@ async function checkStatus() {
   var retval;
   try {
     retval = await status();
-//    console.log("retval: " + retval);
-//    console.log("checkStatus returning retval: " +  retval);
     return retval;
   } catch(e) {
     console.log('console command returned error: ' + e)
   }
-//  console.log("checkStatus returning false");
   return false;
 }
 
@@ -366,15 +348,12 @@ async function status() {
     new Promise(function(resolve, reject) { setTimeout(reject, 2000); })
   ]).then(function(value, reason) {
     if (!value['error']) {
-//        console.log("got message result, returning online");
         return true;
       }
       else {
-//        console.log("got message result, returning offline");
         return false;
       }
     }, function(value, reason) {
-//      console.log("message timeout, returning offline");
       return false;
     });
 }
