@@ -113,7 +113,8 @@ rusty.operation = states.RUNNING;
     // check if we need to read config values from file
     checkConfig(rusty.config);
 
-    await getInstance();
+    let rretval = await getInstance();
+    console.log(rretval);
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -368,42 +369,41 @@ async function status() {
 }
 
 function getInstance() {
-  if (rusty.launchfile) {
-    var instream = fs.createReadStream(rusty.launchfile);
-    var outstream = new stream;
-    var launchfile = readline.createInterface(instream, outstream);
+  return new Promise(function(resolve, reject) {
+    try {
+      if (rusty.launchfile) {
+        var instream = fs.createReadStream(rusty.launchfile);
+        var outstream = new stream;
+        var launchfile = readline.createInterface(instream, outstream);
 
-    launchfile.on('line', function(line) {
-//      console.log("on: " + line);
-//      var hostname = line.search("server.hostname");
-//      console.log(`hostname index: ${hostname}`);
-/*
-      var startString = line.slice(line.search("server.hostname")+15);
-      console.log("startString:" + startString);
+        launchfile.on('line', function(line) {
+          var firstString = line.search("server.hostname");
+          if (firstString != -1) {
+            var secondString = line.slice(firstString+15).replace(/^\s+/, '');
 
-      var secondString = startString.replace(/^\s+/, '');
-      console.log("secondString:" + secondString);
+            var forthString;
+            if (secondString[0] == '"') {
+              var res = secondString.match(/"(.*?)"/i);
+              forthString = res ? res[1] : null;
+            } else {
+              forthString = secondString.match(/\w+/)[0];
+            }
+            if (forthString == -1 || forthString == "" || forthString == false) {
+              forthString = null;
+            } else {
+              forthString = forthString.trim();
+            }
+            console.log("forthString: " + forthString);
+            resolve(forthString);
+          }
+        });
 
-      var thirdString = secondString[0];
-      console.log("thirdString:" + thirdString);
-*/
-      var firstString = line.search("server.hostname");
-      if (firstString != -1) {
-        var secondString = line.slice(firstString+15).replace(/^\s+/, '');
-
-        var forthString;
-        if (secondString[0] == '"') {
-          var res = secondString.match(/"(.*?)"/i);
-          forthString = res ? res[1] : null;
-        } else {
-          forthString = secondString.match(/\w+/);
-        }
-        console.log("forthString: " + forthString);
+        launchfile.on('close', function() {
+//          console.log("closing");
+        });
       }
-
-    });
-
-    launchfile.on('close', function() {
-      console.log("closing");
-    });  }
+    } catch(e) {
+      console.log(e);
+    }
+  });
 }
