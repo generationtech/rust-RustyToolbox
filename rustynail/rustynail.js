@@ -374,10 +374,10 @@ function getInstance() {
     var launchfile = readline.createInterface(instream, outstream);
 
     launchfile.on('line', function(line) {
-      console.log("on: " + line);
-      var hostname = line.search("server.hostname");
-      console.log(`hostname index: ${hostname}`);
-
+//      console.log("on: " + line);
+//      var hostname = line.search("server.hostname");
+//      console.log(`hostname index: ${hostname}`);
+/*
       var startString = line.slice(line.search("server.hostname")+15);
       console.log("startString:" + startString);
 
@@ -386,23 +386,20 @@ function getInstance() {
 
       var thirdString = secondString[0];
       console.log("thirdString:" + thirdString);
+*/
+      var firstString = line.search("server.hostname");
+      if (firstString != -1) {
+        var secondString = line.slice(firstString+15).replace(/^\s+/, '');
 
-      var forthString;
-      if (thirdString == '"') {
-        console.log("found quote");
-
-        var re = /"(.*?)"/i;
-        var res = "";
-        var res = secondString.match(re);
-        if (res) {
-          forthString = res[1];
+        var forthString;
+        if (secondString[0] == '"') {
+          var res = secondString.match(/"(.*?)"/i);
+          forthString = res ? res[1] : null;
         } else {
-          forthString = 0;
+          forthString = secondString.match(/\w+/);
         }
-      } else {
-        forthString = secondString.match(/\w+/);
+        console.log("forthString: " + forthString);
       }
-      console.log("forthString: " + forthString);
 
     });
 
