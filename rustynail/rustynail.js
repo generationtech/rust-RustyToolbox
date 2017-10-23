@@ -74,6 +74,7 @@ var rusty = {
   emailUpdate:  null,
   emailUnavail: null,
   launchfile:   null,
+  instance:     null,
   unavail:      10,
 };
 
@@ -112,9 +113,6 @@ rusty.operation = states.RUNNING;
 
     // check if we need to read config values from file
     checkConfig(rusty.config);
-
-    let rretval = await getInstance();
-    console.log(rretval);
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -238,7 +236,7 @@ async function checkManifest(file) {
   }
 }
 
-function checkConfig(file) {
+async function checkConfig(file) {
   var stats = fs.statSync(file)
   if (stats.mtime.getTime() != rusty.configDate.getTime()) {
     try {
@@ -258,6 +256,7 @@ function checkConfig(file) {
       setConfig(jsonConfig, rusty, "unavail");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
+      rusty.instance = await getInstance();
 
       rusty.configDate = stats.mtime;
       printConfig();
@@ -295,6 +294,7 @@ function printConfig() {
   console.log(`emailUpdate:   ${rusty.emailUpdate}`);
   console.log(`emailUnavail:  ${rusty.emailUnavail}`);
   console.log(`launchfile:    ${rusty.launchfile}`);
+  console.log(`instance:      ${rusty.instance}`);
   console.log(`unavail:       ${rusty.unavail}`);
   console.log(`buildid:       ${rusty.buildid}`);
   console.log(`branch:        ${rusty.branch}`);
@@ -368,12 +368,14 @@ async function status() {
     });
 }
 
+// Gets the name of the Rust server instance. There has to be a simpler
+// way to do this search and string isolation...
 function getInstance() {
   return new Promise(function(resolve, reject) {
     try {
       if (rusty.launchfile) {
-        var instream = fs.createReadStream(rusty.launchfile);
-        var outstream = new stream;
+        var instream   = fs.createReadStream(rusty.launchfile);
+        var outstream  = new stream;
         var launchfile = readline.createInterface(instream, outstream);
 
         launchfile.on('line', function(line) {
@@ -393,13 +395,11 @@ function getInstance() {
             } else {
               forthString = forthString.trim();
             }
-            console.log("forthString: " + forthString);
             resolve(forthString);
           }
         });
 
         launchfile.on('close', function() {
-//          console.log("closing");
         });
       }
     } catch(e) {
