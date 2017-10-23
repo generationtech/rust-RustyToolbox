@@ -10,8 +10,6 @@
          startup for initial rust server run
 
       Change seed on 1st Thursday upgrade
-
-      Track batch/cmd file used to launch Rust server
 */
 
 // get external libraries
@@ -75,6 +73,7 @@ var rusty = {
   emailUnavail: null,
   launchfile:   null,
   instance:     null,
+  eminstance:     null,
   unavail:      10,
 };
 
@@ -119,7 +118,7 @@ rusty.operation = states.RUNNING;
       if (await checkStatus()) {
         if (unavail >= rusty.unavail) {
           console.log("Server back online after being unresponsive");
-          if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server back online after being unresponsive", "Server back online after being unresponsive");
+          if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "back online after being unresponsive", rusty.eminstance + "back online after being unresponsive");
         }
         unavail = 0;
         try {
@@ -140,7 +139,7 @@ rusty.operation = states.RUNNING;
         unavail++;
         console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
         if (unavail == rusty.unavail) {
-          if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server not responding", "Server not responding");
+          if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
         }
       }
     }
@@ -152,7 +151,7 @@ rusty.operation = states.RUNNING;
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
         if (announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
-          console.log(`Buildid differs, announcing update`);
+          console.log(`Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
           rusty.rcon.command = 'say "' + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - announceTick) + ' seconds)"';
           try {
             let retval = await consoleapi.sendCommand(rusty.rcon);
@@ -169,7 +168,7 @@ rusty.operation = states.RUNNING;
       // ready to reboot for upgrade
       if (rusty.operation == states.UPGRADE) {
         console.log(`Buildid differs, updating server`);
-        if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server rebooting for update", "Server rebooting for update");
+        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid: " + steamBuildid);
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
@@ -182,8 +181,14 @@ rusty.operation = states.RUNNING;
       // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {
-          if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server back online after update", "Server back online after update");
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update", rusty.eminstance + "back online after update");
           console.log('Server back online after update');
+          rusty.manifestDate = new Date();
+          try {
+            await checkManifest(rusty.manifest);
+          } catch(e) {
+            console.log(e)
+          }
           rusty.operation = states.RUNNING;
         }
       }
@@ -257,6 +262,7 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
       rusty.instance = await getInstance();
+      rusty.eminstance = rusty.instance ? rusty.instance + ": " : "Server ";
 
       rusty.configDate = stats.mtime;
       printConfig();
