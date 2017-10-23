@@ -10,6 +10,8 @@
          startup for initial rust server run
 
       Change seed on 1st Thursday upgrade
+
+      Log file functionality
 */
 
 // get external libraries
@@ -113,8 +115,11 @@ rusty.operation = states.RUNNING;
   while (rusty.operation != states.STOP) {
 
     await checkConfig(rusty.config);
-    await startRust();
-    checkRunning();
+//    await startRust();
+//    checkRunning(rusty.launchfile);
+    checkRunning("RustDedicated.exe");
+
+
     // check if we need to read config values from file
 //process.exit(0);
     // normal running state, check for updates
@@ -425,34 +430,34 @@ function getInstance() {
   });
 }
 
-async function checkRunning() {
+async function checkRunning(target) {
 //  cp.exec(`wmic process where "commandline LIKE '%C:\\Rust\\Server\\Run_DS.bat%'" get ProcessId | MORE +1`,
-  var killid;
-  await cp.exec(`wmic process where "commandline LIKE '%Run_DS.bat%'" get ProcessId | MORE +1`,
+//  var killid;
+  await cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" get ProcessId | MORE +1`,
     function(error, data) {
-      console.log("error: " + error);
-      console.log("result: " + data);
+//      console.log("error: " + error);
+//      console.log("result: " + data);
 
       var oldarray = data.trim().split("\r\n");
-      console.log("oldarray: " + oldarray);
+//      console.log("oldarray: " + oldarray);
       var newarray = oldarray.map(function(e) {
         e = e.trim();
 //        console.log(e);
         return e;
       });
-      console.log("newarray: " + newarray);
+//      console.log("newarray: " + newarray);
       newarray.forEach(function(item) {
-        console.log("|"+item+"|");
+//        console.log("|"+item+"|");
         cp.exec(`taskkill /t /f /pid ${item}`,
           function(error, data) {
-            console.log("error: " + error);
-            console.log("result: " + data);
+//            console.log("error: " + error);
+//            console.log("result: " + data);
         });
       });
 
 //      console.log(newarray);
 
-      killid = data;
+//      killid = data;
 //      var cp1 = require("child_process");
 /*
       cp1.exec(`taskkill /t /f /pid ${data}`,
@@ -465,13 +470,13 @@ async function checkRunning() {
 }
 
 async function startRust() {
-  console.log("starting rust");
-  var runcmd = `start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`;
+//  console.log("starting rust");
+//  var runcmd = `start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`;
 //  var runcmd = 'cmd.exe /s';
-  console.log(runcmd);
+//  console.log(runcmd);
   await cp.exec(`start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`,
     function(error, data) {
-      console.log("error: " + error);
-      console.log("result: " + data);
+//      console.log("error: " + error);
+//      console.log("result: " + data);
   });
 }
