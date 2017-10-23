@@ -16,6 +16,8 @@
 
 // get external libraries
 var fs         = require('fs');
+var readline   = require('readline');
+var stream     = require('stream');
 var vdf        = require('vdf');
 var program    = require('commander');
 var branchapi  = require('../rustybranch/branchapi');
@@ -32,8 +34,6 @@ var defaults = {
   config:   `rustytoolbox.json`,
   announce: `Update released by Facepunch, server rebooting to update`,
   ticks:    5,
-  emuser:   null,
-  empass:   null,
 };
 
 var states = {
@@ -73,6 +73,7 @@ var rusty = {
   emunavail:    false,
   emailUpdate:  null,
   emailUnavail: null,
+  launchfile:   null,
   unavail:      10,
 };
 
@@ -91,6 +92,7 @@ program
   .option('-v, --empass <password>',      `email user password`)
   .option('-w, --emupdate',               `enable sending email for updates`)
   .option('-x, --emunavail',              `enable sending email for unavailability`)
+  .option('-l, --launchfile <path>',      `path and name of batch file to launch Rust`)
   .option('-f, --forcecfg',               `config file overrides command-line options`)
   .parse(process.argv);
 
@@ -105,10 +107,13 @@ rusty.operation = states.RUNNING;
   var announceTick = 0;
   var unavail      = 0;
 
+
   while (rusty.operation != states.STOP) {
 
     // check if we need to read config values from file
     checkConfig(rusty.config);
+
+    await getInstance();
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -248,6 +253,7 @@ function checkConfig(file) {
       setConfig(jsonConfig, rusty, "emunavail");
       setConfig(jsonConfig, rusty, "emailUpdate");
       setConfig(jsonConfig, rusty, "emailUnavail");
+      setConfig(jsonConfig, rusty, "launchfile");
       setConfig(jsonConfig, rusty, "unavail");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
@@ -265,8 +271,10 @@ function setConfig(jsonConfig, rustyVar, configKey) {
     rustyVar[configKey] = jsonConfig[configKey];
   } else if (program[configKey]) {
     rustyVar[configKey] = program[configKey];
-  } else {
+  } else if (defaults[configKey]) {
     rustyVar[configKey] = defaults[configKey];
+  } else {
+    rustyVar[configKey] = null;
   }
 }
 
@@ -285,6 +293,7 @@ function printConfig() {
   console.log(`emunavail:     ${rusty.emunavail}`);
   console.log(`emailUpdate:   ${rusty.emailUpdate}`);
   console.log(`emailUnavail:  ${rusty.emailUnavail}`);
+  console.log(`launchfile:    ${rusty.launchfile}`);
   console.log(`unavail:       ${rusty.unavail}`);
   console.log(`buildid:       ${rusty.buildid}`);
   console.log(`branch:        ${rusty.branch}`);
@@ -356,4 +365,48 @@ async function status() {
     }, function(value, reason) {
       return false;
     });
+}
+
+function getInstance() {
+  if (rusty.launchfile) {
+    var instream = fs.createReadStream(rusty.launchfile);
+    var outstream = new stream;
+    var launchfile = readline.createInterface(instream, outstream);
+
+    launchfile.on('line', function(line) {
+      console.log("on: " + line);
+      var hostname = line.search("server.hostname");
+      console.log(`hostname index: ${hostname}`);
+
+      var startString = line.slice(line.search("server.hostname")+15);
+      console.log("startString:" + startString);
+
+      var secondString = startString.replace(/^\s+/, '');
+      console.log("secondString:" + secondString);
+
+      var thirdString = secondString[0];
+      console.log("thirdString:" + thirdString);
+
+      var forthString;
+      if (thirdString == '"') {
+        console.log("found quote");
+
+        var re = /"(.*?)"/i;
+        var res = "";
+        var res = secondString.match(re);
+        if (res) {
+          forthString = res[1];
+        } else {
+          forthString = 0;
+        }
+      } else {
+        forthString = secondString.match(/\w+/);
+      }
+      console.log("forthString: " + forthString);
+
+    });
+
+    launchfile.on('close', function() {
+      console.log("closing");
+    });  }
 }
