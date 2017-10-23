@@ -24,7 +24,8 @@ Options:
   -x, --emunavail               enable sending email for unavailability
   -l, --launchfile <path>       path and name of batch file to launch Rust
   -f, --forcecfg                config file overrides command-line options
-  -h, --help                    output usage information```
+  -h, --help                    output usage information
+```
 
 Uses a config file if present. If during RustyNail operation the config file changes, the program will re-read the config file and make adjustments as needed. Any command-line options override config file entries unless `--forcecfg` is specified
 
