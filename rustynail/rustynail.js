@@ -119,9 +119,12 @@ rusty.operation = states.RUNNING;
 //    await startRust();
 //    checkRunning(rusty.launchfile);
 //    checkTask("RustDedicated.exe");
-    console.log(await checkTask(rusty.launchfile));
-    console.log(await checkTask("RustDedicated.exe"));
+console.log(await checkTask(rusty.launchfile));
+console.log(await checkTask('RustDedicated.exe'));
 
+    //console.log(await checkTask(rusty.launchfile));
+    //console.log(await checkTask("RustDedicated.exe"));
+//    await endTask("RustDedicated.exe");
 //    console.log(rusty.launchfile + ": " + await findTask(rusty.launchfile));
 //    console.log("RustDedicated: " + await findTask("RustDedicated.exe"));
 
@@ -149,6 +152,20 @@ rusty.operation = states.RUNNING;
         console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
         unavail++;
+
+        if (await checkTask(rusty.launchfile)) {
+          console.log("check true");
+        } else {
+          console.log("check false");
+        }
+        if (!(await checkTask(rusty.launchfile))) {
+          console.log("Server was not running, starting now");
+          if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
+          await startRust();
+          // snooze the process a bit
+          await new Promise((resolve, reject) => setTimeout(() => resolve(), 10000));
+        }
+
         console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
         if (unavail == rusty.unavail) {
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
@@ -440,13 +457,31 @@ async function findTask(target) {
   // Result of that command always returns 2 extra pid's, for the wmic process itself.
   // Create an array of all returned pid's and kill them all. Some will no longer
   // exist by now of course
-    cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" get ProcessId | MORE +1`,
+//  cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" and "commandline LIKE '%cmd%'" get ProcessId | MORE +1`,
+//    cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" get ProcessId | MORE +1`,
+//    cp.exec(`wmic process where "commandline LIKE '%cmd%'" AND "commandline LIKE '%Run_DS.bat%'"  get ProcessId | MORE +1`,
+
+//  cp.exec(`wmic process where "commandline LIKE '%Run_DS.bat%'"  get ProcessId | MORE +1`,
+//  cp.exec(`wmic process where "commandline LIKE '%RustDedicated.exe%'"  get ProcessId | MORE +1`,
+
+//cp.exec(`wmic process where "commandline LIKE '%cmd%' AND commandline LIKE '%Run_DS.bat%'"  get ProcessId | MORE +1`,
+      var query;
+      if (target == 'RustDedicated.exe') {
+        query = "commandline LIKE '%RustDedicated.exe%'";
+      } else {
+        query = "commandline LIKE '%cmd%' AND commandline LIKE '%" + target + "%'";
+      }
+
+      cp.exec(`wmic process where "` + query + `" get ProcessId | MORE +1`,
       function(error, data) {
-        var oldarray = data.trim().split("\r\n");
-        var newarray = oldarray.map(function(e) {
-          e = e.trim();
-          return e;
-        });
+        newarray = '';
+        if (data) {
+          var oldarray = data.trim().split("\r\n");
+          var newarray = oldarray.map(function(e) {
+            e = e.trim();
+            return e;
+          });
+        }
         resolve(newarray);
       }
     );
@@ -455,7 +490,7 @@ async function findTask(target) {
 
 async function checkTask(target) {
   var res = await findTask(target);
-  // When there are 3 or more running task, then the single task we're looking
+  // When there are 3 or more running tasks, then the single task we're looking
   // for is running
   if (res.length >= 3) {
     return true;
@@ -463,11 +498,15 @@ async function checkTask(target) {
   return false;
 }
 
-async function endTask(pidList) {
-  pidList.forEach(function(item) {
-    cp.exec(`taskkill /t /f /pid ${item}`,
-      function(error, data) {
+async function endTask(target) {
+  return new Promise(async function(resolve, reject) {
+    var pidList = await findTask(target);
+    pidList.forEach(function(item) {
+      cp.exec(`taskkill /t /f /pid ${item}`,
+        function(error, data) {
+      });
     });
+    resolve();
   });
 }
 
