@@ -19,12 +19,12 @@ Options:
   -a, --announce <message>      pre-upgrade in-game message
   -b, --ticks <number>          number of times to repeat update message
   -u, --emuser <email address>  email address for sending email
-  -v, --emapass <password>      email user password
+  -v, --empass <password>       email user password
   -w, --emupdate                enable sending email for updates
   -x, --emunavail               enable sending email for unavailability
+  -l, --launchfile <path>       path and name of batch file to launch Rust
   -f, --forcecfg                config file overrides command-line options
-  -h, --help                    output usage information
-```
+  -h, --help                    output usage information```
 
 Uses a config file if present. If during RustyNail operation the config file changes, the program will re-read the config file and make adjustments as needed. Any command-line options override config file entries unless `--forcecfg` is specified
 

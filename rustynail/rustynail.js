@@ -5,24 +5,17 @@
 //  TBD
 //
 /*
-      Email notification:
-        -by email address list fed from config file or singular from command line
-        -emails for (un)availability
-
       Server monitoring:
-        -during normal operation, check for correct server operaion by using
-         rcon "version"
-        -give option to extend interval by X ticks of regular timer
         -advanced function to kill/restart rust server. can be used during
          startup for initial rust server run
 
       Change seed on 1st Thursday upgrade
-
-      Track batch/cmd file used to launch Rust server
 */
 
 // get external libraries
 var fs         = require('fs');
+var readline   = require('readline');
+var stream     = require('stream');
 var vdf        = require('vdf');
 var program    = require('commander');
 var branchapi  = require('../rustybranch/branchapi');
@@ -73,11 +66,14 @@ var rusty = {
   config:       null,
   configDate:   new Date(),
   emuser:       null,
-  empass:      null,
+  empass:       null,
   emupdate:     false,
   emunavail:    false,
   emailUpdate:  null,
   emailUnavail: null,
+  launchfile:   null,
+  instance:     null,
+  eminstance:     null,
   unavail:      10,
 };
 
@@ -93,9 +89,10 @@ program
   .option('-a, --announce <message>',     `pre-upgrade in-game message`)
   .option('-b, --ticks <number>',         `number of times to repeat update message`)
   .option('-u, --emuser <email address>', `email address for sending email`)
-  .option('-v, --empass <password>',     `email user password`)
+  .option('-v, --empass <password>',      `email user password`)
   .option('-w, --emupdate',               `enable sending email for updates`)
   .option('-x, --emunavail',              `enable sending email for unavailability`)
+  .option('-l, --launchfile <path>',      `path and name of batch file to launch Rust`)
   .option('-f, --forcecfg',               `config file overrides command-line options`)
   .parse(process.argv);
 
@@ -110,22 +107,20 @@ rusty.operation = states.RUNNING;
   var announceTick = 0;
   var unavail      = 0;
 
+
   while (rusty.operation != states.STOP) {
 
     // check if we need to read config values from file
     checkConfig(rusty.config);
-
-//    sendEmails(rusty.emailUnavail,"Server unavailable", "Server unavailable");
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {
         if (unavail >= rusty.unavail) {
           console.log("Server back online after being unresponsive");
-          if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server back online after being unresponsive", "Server back online after being unresponsive");
+          if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "back online after being unresponsive", rusty.eminstance + "back online after being unresponsive");
         }
         unavail = 0;
-//        console.log("server online");
         try {
           await checkManifest(rusty.manifest);
         } catch(e) {
@@ -142,9 +137,9 @@ rusty.operation = states.RUNNING;
         console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
         unavail++;
-        console.log("Server not responding (" + unavail + " attempts)");
+        console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
         if (unavail == rusty.unavail) {
-          if (rusty.emunavail) sendEmails(rusty.emailUnavail, "Server not responding", "Server not responding");
+          if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
         }
       }
     }
@@ -156,7 +151,7 @@ rusty.operation = states.RUNNING;
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
         if (announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
-          console.log(`Buildid differs, announcing update`);
+          console.log(`Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
           rusty.rcon.command = 'say "' + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - announceTick) + ' seconds)"';
           try {
             let retval = await consoleapi.sendCommand(rusty.rcon);
@@ -173,15 +168,7 @@ rusty.operation = states.RUNNING;
       // ready to reboot for upgrade
       if (rusty.operation == states.UPGRADE) {
         console.log(`Buildid differs, updating server`);
-/*
-        rusty.rcon.command = 'say "Rebooting server now for update"';
-        try {
-          let retval = await consoleapi.sendCommand(rusty.rcon);
-        } catch(e) {
-          console.log('console command returned error: ' + e)
-        }
-*/
-        if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server rebooting for update", "Server rebooting for update");
+        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid: " + steamBuildid);
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
@@ -194,8 +181,14 @@ rusty.operation = states.RUNNING;
       // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {
-          if (rusty.emupdate) sendEmails(rusty.emailUpdate, "Server back online after update", "Server back online after update");
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update", rusty.eminstance + "back online after update");
           console.log('Server back online after update');
+          rusty.manifestDate = new Date();
+          try {
+            await checkManifest(rusty.manifest);
+          } catch(e) {
+            console.log(e)
+          }
           rusty.operation = states.RUNNING;
         }
       }
@@ -248,7 +241,7 @@ async function checkManifest(file) {
   }
 }
 
-function checkConfig(file) {
+async function checkConfig(file) {
   var stats = fs.statSync(file)
   if (stats.mtime.getTime() != rusty.configDate.getTime()) {
     try {
@@ -264,9 +257,12 @@ function checkConfig(file) {
       setConfig(jsonConfig, rusty, "emunavail");
       setConfig(jsonConfig, rusty, "emailUpdate");
       setConfig(jsonConfig, rusty, "emailUnavail");
+      setConfig(jsonConfig, rusty, "launchfile");
       setConfig(jsonConfig, rusty, "unavail");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
+      rusty.instance = await getInstance();
+      rusty.eminstance = rusty.instance ? rusty.instance + ": " : "Server ";
 
       rusty.configDate = stats.mtime;
       printConfig();
@@ -281,12 +277,15 @@ function setConfig(jsonConfig, rustyVar, configKey) {
     rustyVar[configKey] = jsonConfig[configKey];
   } else if (program[configKey]) {
     rustyVar[configKey] = program[configKey];
-  } else {
+  } else if (defaults[configKey]) {
     rustyVar[configKey] = defaults[configKey];
+  } else {
+    rustyVar[configKey] = null;
   }
 }
 
 function printConfig() {
+  console.log();
   console.log(`config:        ${rusty.config}`);
   console.log(`configDate:    ${rusty.configDate}`);
   console.log(`manifest:      ${rusty.manifest}`);
@@ -300,6 +299,8 @@ function printConfig() {
   console.log(`emunavail:     ${rusty.emunavail}`);
   console.log(`emailUpdate:   ${rusty.emailUpdate}`);
   console.log(`emailUnavail:  ${rusty.emailUnavail}`);
+  console.log(`launchfile:    ${rusty.launchfile}`);
+  console.log(`instance:      ${rusty.instance}`);
   console.log(`unavail:       ${rusty.unavail}`);
   console.log(`buildid:       ${rusty.buildid}`);
   console.log(`branch:        ${rusty.branch}`);
@@ -311,6 +312,7 @@ function printConfig() {
   console.log(`rcon.id:       ${rusty.rcon.id}`);
   console.log(`rcon.json:     ${rusty.rcon.json}`);
   console.log(`rcon.quiet:    ${rusty.rcon.quiet}`);
+  console.log();
 }
 
 function sendEmail(eaddress, esubject, emessage) {
@@ -334,7 +336,6 @@ function sendEmail(eaddress, esubject, emessage) {
       console.log(error);
     } else {
       console.log('Emailed: ' + eaddress);
-//      console.log('Response:      ' + info.response);
     }
   });
 }
@@ -350,13 +351,10 @@ async function checkStatus() {
   var retval;
   try {
     retval = await status();
-//    console.log("retval: " + retval);
-//    console.log("checkStatus returning retval: " +  retval);
     return retval;
   } catch(e) {
     console.log('console command returned error: ' + e)
   }
-//  console.log("checkStatus returning false");
   return false;
 }
 
@@ -366,15 +364,52 @@ async function status() {
     new Promise(function(resolve, reject) { setTimeout(reject, 2000); })
   ]).then(function(value, reason) {
     if (!value['error']) {
-//        console.log("got message result, returning online");
         return true;
       }
       else {
-//        console.log("got message result, returning offline");
         return false;
       }
     }, function(value, reason) {
-//      console.log("message timeout, returning offline");
       return false;
     });
+}
+
+// Gets the name of the Rust server instance. There has to be a simpler
+// way to do this search and string isolation...
+function getInstance() {
+  return new Promise(function(resolve, reject) {
+    try {
+      if (rusty.launchfile) {
+        var instream   = fs.createReadStream(rusty.launchfile);
+        var outstream  = new stream;
+        var launchfile = readline.createInterface(instream, outstream);
+
+        launchfile.on('line', function(line) {
+          var firstString = line.search("server.hostname");
+          if (firstString != -1) {
+            var secondString = line.slice(firstString+15).replace(/^\s+/, '');
+
+            var forthString;
+            if (secondString[0] == '"') {
+              var res = secondString.match(/"(.*?)"/i);
+              forthString = res ? res[1] : null;
+            } else {
+              forthString = secondString.match(/\w+/)[0];
+            }
+            if (forthString == -1 || forthString == "" || forthString == false) {
+              forthString = null;
+            } else {
+              forthString = forthString.trim();
+            }
+            resolve(forthString);
+          }
+        });
+
+        launchfile.on('close', function() {
+        });
+      }
+    } catch(e) {
+      console.log(e);
+    }
+  });
 }
