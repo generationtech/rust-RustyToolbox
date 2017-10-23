@@ -114,14 +114,17 @@ rusty.operation = states.RUNNING;
 
   while (rusty.operation != states.STOP) {
 
+    // check if we need to read config values from file
     await checkConfig(rusty.config);
 //    await startRust();
 //    checkRunning(rusty.launchfile);
-    checkRunning("RustDedicated.exe");
+//    checkTask("RustDedicated.exe");
+    console.log(await checkTask(rusty.launchfile));
+    console.log(await checkTask("RustDedicated.exe"));
 
+//    console.log(rusty.launchfile + ": " + await findTask(rusty.launchfile));
+//    console.log("RustDedicated: " + await findTask("RustDedicated.exe"));
 
-    // check if we need to read config values from file
-//process.exit(0);
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {
@@ -255,6 +258,7 @@ async function checkConfig(file) {
   if (stats.mtime.getTime() != rusty.configDate.getTime()) {
     try {
       var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
+
       // handle standard (easy) config options
       setConfig(jsonConfig, rusty, "manifest");
       setConfig(jsonConfig, rusty, "timer");
@@ -271,6 +275,7 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty, "unavail");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
+
       // tweaks needed for some config options
       if (!rusty.launchdir.match(/.\\$/)) {
         rusty.launchdir += "\\";
@@ -430,53 +435,44 @@ function getInstance() {
   });
 }
 
-async function checkRunning(target) {
-//  cp.exec(`wmic process where "commandline LIKE '%C:\\Rust\\Server\\Run_DS.bat%'" get ProcessId | MORE +1`,
-//  var killid;
-  await cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" get ProcessId | MORE +1`,
-    function(error, data) {
-//      console.log("error: " + error);
-//      console.log("result: " + data);
-
-      var oldarray = data.trim().split("\r\n");
-//      console.log("oldarray: " + oldarray);
-      var newarray = oldarray.map(function(e) {
-        e = e.trim();
-//        console.log(e);
-        return e;
-      });
-//      console.log("newarray: " + newarray);
-      newarray.forEach(function(item) {
-//        console.log("|"+item+"|");
-        cp.exec(`taskkill /t /f /pid ${item}`,
-          function(error, data) {
-//            console.log("error: " + error);
-//            console.log("result: " + data);
+async function findTask(target) {
+  return new Promise(function(resolve, reject) {
+  // Result of that command always returns 2 extra pid's, for the wmic process itself.
+  // Create an array of all returned pid's and kill them all. Some will no longer
+  // exist by now of course
+    cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" get ProcessId | MORE +1`,
+      function(error, data) {
+        var oldarray = data.trim().split("\r\n");
+        var newarray = oldarray.map(function(e) {
+          e = e.trim();
+          return e;
         });
-      });
+        resolve(newarray);
+      }
+    );
+  });
+}
 
-//      console.log(newarray);
+async function checkTask(target) {
+  var res = await findTask(target);
+  // When there are 3 or more running task, then the single task we're looking
+  // for is running
+  if (res.length >= 3) {
+    return true;
+  }
+  return false;
+}
 
-//      killid = data;
-//      var cp1 = require("child_process");
-/*
-      cp1.exec(`taskkill /t /f /pid ${data}`,
-        function(error, data) {
-          console.log("error: " + error);
-          console.log("result: " + data);
-      });
-*/
+async function endTask(pidList) {
+  pidList.forEach(function(item) {
+    cp.exec(`taskkill /t /f /pid ${item}`,
+      function(error, data) {
+    });
   });
 }
 
 async function startRust() {
-//  console.log("starting rust");
-//  var runcmd = `start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`;
-//  var runcmd = 'cmd.exe /s';
-//  console.log(runcmd);
   await cp.exec(`start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`,
     function(error, data) {
-//      console.log("error: " + error);
-//      console.log("result: " + data);
   });
 }
