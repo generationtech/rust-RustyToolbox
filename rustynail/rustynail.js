@@ -21,6 +21,7 @@ var program    = require('commander');
 var branchapi  = require('../rustybranch/branchapi');
 var consoleapi = require('../rustyconsole/consoleapi');
 var nodemailer = require('nodemailer');
+var cp         = require("child_process");
 
 // setup some default values
 var defaults = {
@@ -72,8 +73,9 @@ var rusty = {
   emailUpdate:  null,
   emailUnavail: null,
   launchfile:   null,
+  launchdir:    null,
   instance:     null,
-  eminstance:     null,
+  eminstance:   null,
   unavail:      10,
 };
 
@@ -92,7 +94,8 @@ program
   .option('-v, --empass <password>',      `email user password`)
   .option('-w, --emupdate',               `enable sending email for updates`)
   .option('-x, --emunavail',              `enable sending email for unavailability`)
-  .option('-l, --launchfile <path>',      `path and name of batch file to launch Rust`)
+  .option('-l, --launchfile <filename>',  `name of batch file to launch Rust`)
+  .option('-m, --launchdir <path>',       `directory of launchfile batch file`)
   .option('-f, --forcecfg',               `config file overrides command-line options`)
   .parse(process.argv);
 
@@ -107,12 +110,13 @@ rusty.operation = states.RUNNING;
   var announceTick = 0;
   var unavail      = 0;
 
-
   while (rusty.operation != states.STOP) {
 
+    await checkConfig(rusty.config);
+    await startRust();
+    checkRunning();
     // check if we need to read config values from file
-    checkConfig(rusty.config);
-
+//process.exit(0);
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {
@@ -168,7 +172,7 @@ rusty.operation = states.RUNNING;
       // ready to reboot for upgrade
       if (rusty.operation == states.UPGRADE) {
         console.log(`Buildid differs, updating server`);
-        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid: " + steamBuildid);
+        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid " + steamBuildid);
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
@@ -246,7 +250,7 @@ async function checkConfig(file) {
   if (stats.mtime.getTime() != rusty.configDate.getTime()) {
     try {
       var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
-
+      // handle standard (easy) config options
       setConfig(jsonConfig, rusty, "manifest");
       setConfig(jsonConfig, rusty, "timer");
       setConfig(jsonConfig, rusty, "announce");
@@ -258,14 +262,20 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty, "emailUpdate");
       setConfig(jsonConfig, rusty, "emailUnavail");
       setConfig(jsonConfig, rusty, "launchfile");
+      setConfig(jsonConfig, rusty, "launchdir");
       setConfig(jsonConfig, rusty, "unavail");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
-      rusty.instance = await getInstance();
+      // tweaks needed for some config options
+      if (!rusty.launchdir.match(/.\\$/)) {
+        rusty.launchdir += "\\";
+      }
+      rusty.instance   = await getInstance();
       rusty.eminstance = rusty.instance ? rusty.instance + ": " : "Server ";
-
       rusty.configDate = stats.mtime;
+
       printConfig();
+
     } catch(e) {
       console.log(e)
     }
@@ -300,6 +310,7 @@ function printConfig() {
   console.log(`emailUpdate:   ${rusty.emailUpdate}`);
   console.log(`emailUnavail:  ${rusty.emailUnavail}`);
   console.log(`launchfile:    ${rusty.launchfile}`);
+  console.log(`launchdir:     ${rusty.launchdir}`);
   console.log(`instance:      ${rusty.instance}`);
   console.log(`unavail:       ${rusty.unavail}`);
   console.log(`buildid:       ${rusty.buildid}`);
@@ -380,7 +391,7 @@ function getInstance() {
   return new Promise(function(resolve, reject) {
     try {
       if (rusty.launchfile) {
-        var instream   = fs.createReadStream(rusty.launchfile);
+        var instream   = fs.createReadStream(rusty.launchdir + rusty.launchfile);
         var outstream  = new stream;
         var launchfile = readline.createInterface(instream, outstream);
 
@@ -411,5 +422,56 @@ function getInstance() {
     } catch(e) {
       console.log(e);
     }
+  });
+}
+
+async function checkRunning() {
+//  cp.exec(`wmic process where "commandline LIKE '%C:\\Rust\\Server\\Run_DS.bat%'" get ProcessId | MORE +1`,
+  var killid;
+  await cp.exec(`wmic process where "commandline LIKE '%Run_DS.bat%'" get ProcessId | MORE +1`,
+    function(error, data) {
+      console.log("error: " + error);
+      console.log("result: " + data);
+
+      var oldarray = data.trim().split("\r\n");
+      console.log("oldarray: " + oldarray);
+      var newarray = oldarray.map(function(e) {
+        e = e.trim();
+//        console.log(e);
+        return e;
+      });
+      console.log("newarray: " + newarray);
+      newarray.forEach(function(item) {
+        console.log("|"+item+"|");
+        cp.exec(`taskkill /t /f /pid ${item}`,
+          function(error, data) {
+            console.log("error: " + error);
+            console.log("result: " + data);
+        });
+      });
+
+//      console.log(newarray);
+
+      killid = data;
+//      var cp1 = require("child_process");
+/*
+      cp1.exec(`taskkill /t /f /pid ${data}`,
+        function(error, data) {
+          console.log("error: " + error);
+          console.log("result: " + data);
+      });
+*/
+  });
+}
+
+async function startRust() {
+  console.log("starting rust");
+  var runcmd = `start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`;
+//  var runcmd = 'cmd.exe /s';
+  console.log(runcmd);
+  await cp.exec(`start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`,
+    function(error, data) {
+      console.log("error: " + error);
+      console.log("result: " + data);
   });
 }
