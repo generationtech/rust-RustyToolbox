@@ -117,12 +117,12 @@ rusty.operation = states.RUNNING;
     // check if we need to read config values from file
     await checkConfig(rusty.config);
 
-    console.log("seedDate: " + rusty.seedDate.valueOf());
-    console.log(new Date());
+//    console.log("seedDate: " + rusty.seedDate.valueOf());
+//    console.log(new Date());
 
-    if (isFirstThursday()) {
-      checkSeed();
-    }
+//    if (isFirstThursday()) {
+//      checkSeed();
+//    }
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -245,7 +245,7 @@ rusty.operation = states.RUNNING;
 //
 
 
-function readManifest(file) {
+function readFile(file) {
   return new Promise(function(resolve, reject) {
     try {
       var data = '';
@@ -271,7 +271,7 @@ async function checkManifest(file) {
     var stats = fs.statSync(file)
     if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
       try {
-        var data      = await readManifest(file);
+        var data      = await readFile(file);
         let manifest  = vdf.parse(data);
         if (manifest) {
           rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
@@ -547,7 +547,7 @@ function isFirstThursday() {
 //    console.log("todayDay.getFullYear: " + todayDay.getFullYear());
     targetDay = new Date(todayDay.getMonth()+1 + " " + ((i++) + 21) + " " + todayDay.getFullYear());
 //    console.log("targetDay: " + targetDay);
-    if(targetDay.getDay() == 3) curDay++;
+    if(targetDay.getDay() == 2) curDay++;
   }
   todayDay  = todayDay.setHours(0,0,0,0);
   targetDay = targetDay.setHours(0,0,0,0);
@@ -567,7 +567,6 @@ function checkSeed() {
     console.log("changing seed");
     newSeed(getRandomInt(0, 2147483647), getRandomInt(0, 2147483647));
     readWriteConfig(dateNow);
-}
   } else {
     console.log("not changing seed");
   }
@@ -579,7 +578,18 @@ function getRandomInt(min, max) {
   return Math.floor(Math.random() * (max - min)) + min;
 }
 
-function newSeed(seed, salt) {
+async function newSeed(seed, salt) {
+
+  var data = await readFile(rusty.launchdir + rusty.launchfile);
+  console.log("data: " + data);
+
+  var oldarray = data.trim().split("\r\n");
+  console.log("oldarray: " + oldarray);
+
+  console.log("array elements");
+  oldarray.forEach(function(item) {
+    console.log(item);
+  });
 
 }
 
