@@ -117,10 +117,12 @@ rusty.operation = states.RUNNING;
     // check if we need to read config values from file
     await checkConfig(rusty.config);
 
-    console.log(rusty.seedDate);
+    console.log("seedDate: " + rusty.seedDate.valueOf());
     console.log(new Date());
 
-    console.log(isThursday());
+    if (isFirstThursday()) {
+      checkSeed();
+    }
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -200,6 +202,10 @@ rusty.operation = states.RUNNING;
           rusty.operation = states.REBOOT;
           unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
+          // Get new seed 1st reboot of every 1st Thursday of the month
+          if (isFirstThursday()) {
+            checkSeed();
+          }
         } catch(e) {
           console.log('console command returned error: ' + e)
         }
@@ -343,6 +349,7 @@ function printConfig() {
   console.log(`timer:         ${rusty.timer}`);
   console.log(`announce:      ${rusty.announce}`);
   console.log(`ticks:         ${rusty.ticks}`);
+  console.log(`seedDate:      ${rusty.seedDate}`);
   console.log(`emuser:        ${rusty.emuser}`);
   console.log(`empass:        ${rusty.empass}`);
   console.log(`emupdate:      ${rusty.emupdate}`);
@@ -529,7 +536,7 @@ async function restartServer() {
   await startRust();
 }
 
-function isThursday() {
+function isFirstThursday() {
 //  console.log(new Date());
   var todayDay = new Date();
 //  console.log("todayDay: " + todayDay);
@@ -538,9 +545,9 @@ function isThursday() {
   while(curDay < 1 && i < 31) {
 //    console.log("todayDay.getMonth: " + todayDay.getMonth());
 //    console.log("todayDay.getFullYear: " + todayDay.getFullYear());
-    targetDay = new Date(todayDay.getMonth()+1 + " " + ((i++) + 21) + " "+ todayDay.getFullYear());
+    targetDay = new Date(todayDay.getMonth()+1 + " " + ((i++) + 21) + " " + todayDay.getFullYear());
 //    console.log("targetDay: " + targetDay);
-    if(targetDay.getDay() == 2) curDay++;
+    if(targetDay.getDay() == 3) curDay++;
   }
   todayDay  = todayDay.setHours(0,0,0,0);
   targetDay = targetDay.setHours(0,0,0,0);
@@ -552,6 +559,30 @@ function isThursday() {
   }
 }
 
-function writeConfig() {
+function checkSeed() {
+  var dateNow = new Date();
+  dateNow     = dateNow.setHours(0,0,0,0);
+  // only set if no pre-existing seed or seed not already set today
+  if ((rusty.seedDate.valueOf() == -2208970800000) || (rusty.seedDate.valueOf() < dateNow.valueOf())) {
+    console.log("changing seed");
+    newSeed(getRandomInt(0, 2147483647), getRandomInt(0, 2147483647));
+    readWriteConfig(dateNow);
+}
+  } else {
+    console.log("not changing seed");
+  }
+}
+
+function getRandomInt(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min)) + min;
+}
+
+function newSeed(seed, salt) {
+
+}
+
+function readWriteConfig(seedDate) {
 
 }
