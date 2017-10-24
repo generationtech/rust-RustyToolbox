@@ -120,6 +120,8 @@ rusty.operation = states.RUNNING;
     console.log(rusty.seedDate);
     console.log(new Date());
 
+    console.log(isThursday());
+
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {
@@ -528,26 +530,24 @@ async function restartServer() {
 }
 
 function isThursday() {
-  console.log(new Date());
+//  console.log(new Date());
+  var todayDay = new Date();
+//  console.log("todayDay: " + todayDay);
+  var targetDay, curDay = 0, i = 1;
 
-  var targetDay, curDay=0, i=1, seekDay;
-  if(d=="Sunday") seekDay = 0;
-  if(d=="Monday") seekDay = 1;
-  if(d=="Tuesday") seekDay = 2;
-  if(d=="Wednesday") seekDay = 3;
-  if(d=="Thursday") seekDay = 4;
-  if(d=="Friday") seekDay = 5;
-  if(d=="Saturday") seekDay = 6;
-
-  while(curDay < n && i < 31) {
-    targetDay = new Date(i++ + " "+m+" "+y);
-    if(targetDay.getDay()==seekDay) curDay++;
+  while(curDay < 1 && i < 31) {
+//    console.log("todayDay.getMonth: " + todayDay.getMonth());
+//    console.log("todayDay.getFullYear: " + todayDay.getFullYear());
+    targetDay = new Date(todayDay.getMonth()+1 + " " + ((i++) + 21) + " "+ todayDay.getFullYear());
+//    console.log("targetDay: " + targetDay);
+    if(targetDay.getDay() == 2) curDay++;
   }
-  if(curDay==n) {
-    targetDay = targetDay.getDate();
-    return targetDay;
-  } else
-  {
+  todayDay  = todayDay.setHours(0,0,0,0);
+  targetDay = targetDay.setHours(0,0,0,0);
+
+  if(todayDay.valueOf() == targetDay.valueOf()) {
+    return true;
+  } else {
     return false;
   }
 }
