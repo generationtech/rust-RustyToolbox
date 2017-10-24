@@ -150,23 +150,21 @@ rusty.operation = states.RUNNING;
         if (!(await checkTask(rusty.launchfile))) {
           console.log("Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
-          await endTask("RustDedicated.exe");
-          await endTask(rusty.launchfile);
-          await startRust();
+          await restartServer();
+          unavail = 0;
           // snooze the process a bit
           await new Promise((resolve, reject) => setTimeout(() => resolve(), 10000));
         } else {
-          console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
-          if (unavail == rusty.unavail) {
-            if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
-          }
           if (unavail >= (rusty.unavail * rusty.failsafe)) {
             console.log("Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
-            await endTask("RustDedicated.exe");
-            await endTask(rusty.launchfile);
-            await startRust();
+            await restartServer();
             unavail = 0;
+          } else {
+            console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
+            if (unavail == rusty.unavail) {
+              if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
+            }
           }
         }
       }
@@ -200,6 +198,7 @@ rusty.operation = states.RUNNING;
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
+          unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
         } catch(e) {
           console.log('console command returned error: ' + e)
@@ -218,6 +217,15 @@ rusty.operation = states.RUNNING;
             console.log(e)
           }
           rusty.operation = states.RUNNING;
+          unavail = 0;
+        } else {
+          unavail++;
+          if (unavail >= (rusty.unavail * rusty.failsafe)) {
+            console.log("Server fatal unresponsive, killing task");
+            if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
+            await restartServer();
+            unavail = 0;
+          }
         }
       }
     }
@@ -512,4 +520,10 @@ async function startRust() {
   await cp.exec(`start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`,
     function(error, data) {
   });
+}
+
+async function restartServer() {
+  await endTask("RustDedicated.exe");
+  await endTask(rusty.launchfile);
+  await startRust();
 }

@@ -16,13 +16,15 @@ Options:
   -m, --manifest <path>         location of manifest file
   -t, --timer <directory>       check loop timer in milliseconds
   -n, --unavail <number>        unavailability ticks
+  -n, --failsafe <multiplier>   unavail multiplier to recover crashed server
   -a, --announce <message>      pre-upgrade in-game message
   -b, --ticks <number>          number of times to repeat update message
   -u, --emuser <email address>  email address for sending email
   -v, --empass <password>       email user password
   -w, --emupdate                enable sending email for updates
   -x, --emunavail               enable sending email for unavailability
-  -l, --launchfile <path>       path and name of batch file to launch Rust
+  -l, --launchfile <filename>   name of batch file to launch Rust
+  -m, --launchdir <path>        directory of launchfile batch file
   -f, --forcecfg                config file overrides command-line options
   -h, --help                    output usage information
 ```
