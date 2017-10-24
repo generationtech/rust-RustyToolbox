@@ -120,9 +120,9 @@ rusty.operation = states.RUNNING;
 //    console.log("seedDate: " + rusty.seedDate.valueOf());
 //    console.log(new Date());
 
-//    if (isFirstThursday()) {
-//      checkSeed();
-//    }
+    if (isFirstThursday()) {
+      checkSeed();
+    }
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -567,6 +567,7 @@ function checkSeed() {
     console.log("changing seed");
     newSeed(getRandomInt(0, 2147483647), getRandomInt(0, 2147483647));
     readWriteConfig(dateNow);
+    rusty.seedDate = dateNow;
   } else {
     console.log("not changing seed");
   }
@@ -581,15 +582,49 @@ function getRandomInt(min, max) {
 async function newSeed(seed, salt) {
 
   var data = await readFile(rusty.launchdir + rusty.launchfile);
-  console.log("data: " + data);
+//  console.log("data: " + data);
 
   var oldarray = data.trim().split("\r\n");
   console.log("oldarray: " + oldarray);
+  console.log();
 
-  console.log("array elements");
-  oldarray.forEach(function(item) {
-    console.log(item);
+//  console.log("array elements");
+  oldarray.forEach(function(item, index) {
+    var firstString = item.search("RustDedicated.exe");
+    if (firstString != -1) {
+      var secondString = item.search("server.seed");
+      if (secondString != -1) {
+        var firstItem = item.substring(0, secondString + 11);
+//        console.log("secondString: " + secondString);
+        console.log("firstItem: " + firstItem);
+        console.log();
+        var secondItem = item.substring(secondString + 11).trim();
+        item = firstItem + " " + seed;
+        console.log("secondItem: " + secondItem);
+        console.log();
+        var thirdItem = secondItem.match(/\s.*/);
+        if (thirdItem) {
+          thirdItem = thirdItem[0].trim();
+          console.log("thirdItem: " + thirdItem);
+          console.log();
+          item += " " + thirdItem;
+        }
+        oldarray[index] = item;
+      } else {
+
+      }
+
+      var secondString = item.search("server.salt");
+      if (firstString != -1) {
+
+      } else {
+
+      }
+
+    }
+//    console.log(item);
   });
+  console.log("oldarray: " + oldarray);
 
 }
 
