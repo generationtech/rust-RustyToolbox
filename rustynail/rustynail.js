@@ -5,10 +5,6 @@
 //  TBD
 //
 /*
-      Server monitoring:
-        -advanced function to kill/restart rust server. can be used during
-         startup for initial rust server run
-
       Change seed on 1st Thursday upgrade
 
       Log file functionality
@@ -35,6 +31,7 @@ var defaults = {
   config:   `rustytoolbox.json`,
   announce: `Update released by Facepunch, server rebooting to update`,
   ticks:    5,
+  seedDate: new Date(1 + " January 1900"),
 };
 
 var states = {
@@ -68,6 +65,7 @@ var rusty = {
   operation:    null,
   config:       null,
   configDate:   new Date(),
+  seedDate:     new Date(),
   emuser:       null,
   empass:       null,
   emupdate:     false,
@@ -119,8 +117,8 @@ rusty.operation = states.RUNNING;
     // check if we need to read config values from file
     await checkConfig(rusty.config);
 
-//console.log(await checkTask(rusty.launchfile));
-//console.log(await checkTask('RustDedicated.exe'));
+    console.log(rusty.seedDate);
+    console.log(new Date());
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -208,7 +206,7 @@ rusty.operation = states.RUNNING;
       // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {
-          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update", rusty.eminstance + "back online after update");
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update");
           console.log('Server back online after update');
           rusty.manifestDate = new Date();
           try {
@@ -292,6 +290,7 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty, "timer");
       setConfig(jsonConfig, rusty, "announce");
       setConfig(jsonConfig, rusty, "ticks");
+      setConfig(jsonConfig, rusty, "seedDate");
       setConfig(jsonConfig, rusty, "emuser");
       setConfig(jsonConfig, rusty, "empass");
       setConfig(jsonConfig, rusty, "emupdate");
@@ -526,4 +525,33 @@ async function restartServer() {
   await endTask("RustDedicated.exe");
   await endTask(rusty.launchfile);
   await startRust();
+}
+
+function isThursday() {
+  console.log(new Date());
+
+  var targetDay, curDay=0, i=1, seekDay;
+  if(d=="Sunday") seekDay = 0;
+  if(d=="Monday") seekDay = 1;
+  if(d=="Tuesday") seekDay = 2;
+  if(d=="Wednesday") seekDay = 3;
+  if(d=="Thursday") seekDay = 4;
+  if(d=="Friday") seekDay = 5;
+  if(d=="Saturday") seekDay = 6;
+
+  while(curDay < n && i < 31) {
+    targetDay = new Date(i++ + " "+m+" "+y);
+    if(targetDay.getDay()==seekDay) curDay++;
+  }
+  if(curDay==n) {
+    targetDay = targetDay.getDate();
+    return targetDay;
+  } else
+  {
+    return false;
+  }
+}
+
+function writeConfig() {
+
 }
