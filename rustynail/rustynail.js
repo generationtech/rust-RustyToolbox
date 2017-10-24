@@ -79,6 +79,7 @@ var rusty = {
   instance:     null,
   eminstance:   null,
   unavail:      10,
+  failsafe:     5,
 };
 
 program
@@ -90,6 +91,7 @@ program
   .option('-m, --manifest <path>',        `location of manifest file`)
   .option('-t, --timer <directory>',      `check loop timer in milliseconds`)
   .option('-n, --unavail <number>',       `unavailability ticks`)
+  .option('-n, --failsafe <multiplier>',  `unavail multiplier to recover crashed server`)
   .option('-a, --announce <message>',     `pre-upgrade in-game message`)
   .option('-b, --ticks <number>',         `number of times to repeat update message`)
   .option('-u, --emuser <email address>', `email address for sending email`)
@@ -105,7 +107,7 @@ rusty.config    = program.config ? program.config : defaults.config;
 rusty.operation = states.RUNNING;
 
 //
-// MAIN
+// MAIN LOOP
 //
 (async ()=> {
   var steamBuildid = null;
@@ -116,17 +118,9 @@ rusty.operation = states.RUNNING;
 
     // check if we need to read config values from file
     await checkConfig(rusty.config);
-//    await startRust();
-//    checkRunning(rusty.launchfile);
-//    checkTask("RustDedicated.exe");
-console.log(await checkTask(rusty.launchfile));
-console.log(await checkTask('RustDedicated.exe'));
 
-    //console.log(await checkTask(rusty.launchfile));
-    //console.log(await checkTask("RustDedicated.exe"));
-//    await endTask("RustDedicated.exe");
-//    console.log(rusty.launchfile + ": " + await findTask(rusty.launchfile));
-//    console.log("RustDedicated: " + await findTask("RustDedicated.exe"));
+//console.log(await checkTask(rusty.launchfile));
+//console.log(await checkTask('RustDedicated.exe'));
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -152,23 +146,28 @@ console.log(await checkTask('RustDedicated.exe'));
         console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
         unavail++;
-
-        if (await checkTask(rusty.launchfile)) {
-          console.log("check true");
-        } else {
-          console.log("check false");
-        }
+        // if the Rust server is not actually running, start it
         if (!(await checkTask(rusty.launchfile))) {
           console.log("Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
+          await endTask("RustDedicated.exe");
+          await endTask(rusty.launchfile);
           await startRust();
           // snooze the process a bit
           await new Promise((resolve, reject) => setTimeout(() => resolve(), 10000));
-        }
-
-        console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
-        if (unavail == rusty.unavail) {
-          if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
+        } else {
+          console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
+          if (unavail == rusty.unavail) {
+            if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
+          }
+          if (unavail >= (rusty.unavail * rusty.failsafe)) {
+            console.log("Server fatal unresponsive, killing task");
+            if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
+            await endTask("RustDedicated.exe");
+            await endTask(rusty.launchfile);
+            await startRust();
+            unavail = 0;
+          }
         }
       }
     }
@@ -227,6 +226,10 @@ console.log(await checkTask('RustDedicated.exe'));
   }
   process.exit(0);
 })();
+//
+// END MAIN LOOP
+//
+
 
 function readManifest(file) {
   return new Promise(function(resolve, reject) {
@@ -290,6 +293,7 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty, "launchfile");
       setConfig(jsonConfig, rusty, "launchdir");
       setConfig(jsonConfig, rusty, "unavail");
+      setConfig(jsonConfig, rusty, "failsafe");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
@@ -340,6 +344,7 @@ function printConfig() {
   console.log(`launchdir:     ${rusty.launchdir}`);
   console.log(`instance:      ${rusty.instance}`);
   console.log(`unavail:       ${rusty.unavail}`);
+  console.log(`failsafe:      ${rusty.failsafe}`);
   console.log(`buildid:       ${rusty.buildid}`);
   console.log(`branch:        ${rusty.branch}`);
   console.log(`operation:     ${rusty.operation}`);
@@ -457,22 +462,15 @@ async function findTask(target) {
   // Result of that command always returns 2 extra pid's, for the wmic process itself.
   // Create an array of all returned pid's and kill them all. Some will no longer
   // exist by now of course
-//  cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" and "commandline LIKE '%cmd%'" get ProcessId | MORE +1`,
-//    cp.exec(`wmic process where "commandline LIKE '%` + target + `%'" get ProcessId | MORE +1`,
-//    cp.exec(`wmic process where "commandline LIKE '%cmd%'" AND "commandline LIKE '%Run_DS.bat%'"  get ProcessId | MORE +1`,
+    var query;
+    // this current design only allows one Rust server per windows server login
+    if (target == 'RustDedicated.exe') {
+      query = "commandline LIKE '%RustDedicated.exe%'";
+    } else {
+      query = "commandline LIKE '%cmd%' AND commandline LIKE '%" + target + "%'";
+    }
 
-//  cp.exec(`wmic process where "commandline LIKE '%Run_DS.bat%'"  get ProcessId | MORE +1`,
-//  cp.exec(`wmic process where "commandline LIKE '%RustDedicated.exe%'"  get ProcessId | MORE +1`,
-
-//cp.exec(`wmic process where "commandline LIKE '%cmd%' AND commandline LIKE '%Run_DS.bat%'"  get ProcessId | MORE +1`,
-      var query;
-      if (target == 'RustDedicated.exe') {
-        query = "commandline LIKE '%RustDedicated.exe%'";
-      } else {
-        query = "commandline LIKE '%cmd%' AND commandline LIKE '%" + target + "%'";
-      }
-
-      cp.exec(`wmic process where "` + query + `" get ProcessId | MORE +1`,
+    cp.exec(`wmic process where "` + query + `" get ProcessId | MORE +1`,
       function(error, data) {
         newarray = '';
         if (data) {
@@ -491,7 +489,7 @@ async function findTask(target) {
 async function checkTask(target) {
   var res = await findTask(target);
   // When there are 3 or more running tasks, then the single task we're looking
-  // for is running
+  // for is running (other pids are artifacts from query itself)
   if (res.length >= 3) {
     return true;
   }
