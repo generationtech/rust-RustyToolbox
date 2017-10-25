@@ -117,13 +117,6 @@ rusty.operation = states.RUNNING;
     // check if we need to read config values from file
     await checkConfig(rusty.config);
 
-//    console.log("seedDate: " + rusty.seedDate.valueOf());
-//    console.log(new Date());
-
-    if (isFirstThursday()) {
-      checkSeed();
-    }
-
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {
@@ -564,8 +557,11 @@ function checkSeed() {
   dateNow     = dateNow.setHours(0,0,0,0);
   // only set if no pre-existing seed or seed not already set today
   if ((rusty.seedDate.valueOf() == -2208970800000) || (rusty.seedDate.valueOf() < dateNow.valueOf())) {
-    console.log("changing seed");
-    newSeed(getRandomInt(0, 2147483647), getRandomInt(0, 2147483647));
+    console.log("Update on 1st Thursday, changing to new seed and salt");
+    var nextSeed = getRandomInt(0, 2147483647);
+    var nextSalt = getRandomInt(0, 2147483647);
+    if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt);
+    newSeed(nextSeed, nextSalt);
     readWriteConfig(dateNow);
     rusty.seedDate = dateNow;
   } else {
@@ -580,11 +576,8 @@ function getRandomInt(min, max) {
 }
 
 async function newSeed(seed, salt) {
-  var data = await readFile(rusty.launchdir + rusty.launchfile);
-
+  var data     = await readFile(rusty.launchdir + rusty.launchfile);
   var oldarray = data.trim().split("\r\n");
-  console.log("oldarray: " + oldarray);
-  console.log();
 
   oldarray.forEach(function(item, index) {
     // does this is line containing server startup command line?
@@ -596,35 +589,37 @@ async function newSeed(seed, salt) {
       oldarray[index] = replaceEntry(itemNew, "server.salt", salt);
     }
   });
-  console.log("oldarray: " + oldarray);
+  // write the new commnand line out to the batch file
+  fs.truncate(rusty.launchdir + rusty.launchfile, 0, function() {
+      fs.writeFileSync(rusty.launchdir + rusty.launchfile, oldarray.join("\r\n"), function (err) {
+          if (err) {
+              return console.log("Error writing file: " + err);
+          }
+      });
+  });
+  await restartServer();
 }
 
 function replaceEntry(item, entry, value) {
   var itemNew = item;
-  // does it contain an existing seed value?
+  // does it contain an existing entry value?
   var secondString = item.search(entry);
   if (secondString != -1) {
-    // found existing seed value, updating it
+    // found existing entry value, updating it
     var firstItem = item.substring(0, secondString + 11);
-    console.log("firstItem: " + firstItem);
-    console.log();
-    // add a new seed value
+    // add a new entry value
     itemNew = firstItem + " " + value;
     // remove all outside whitespace from second part
     var secondItem = item.substring(secondString + 11).trim();
-    console.log("secondItem: " + secondItem);
-    console.log();
     // is there a second part with additional command line entries?
     var thirdItem = secondItem.match(/\s.*/);
     if (thirdItem) {
       // there is addional entries, clean them up and add
       thirdItem = thirdItem[0].trim();
-      console.log("thirdItem: " + thirdItem);
-      console.log();
       itemNew += " " + thirdItem;
     }
   } else {
-    // no existing seed, adding one
+    // no existing entry, adding one
     itemNew += " +" + entry + " " + value;
   }
   return itemNew;
