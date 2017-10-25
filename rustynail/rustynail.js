@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// get external libraries
+// Get external libraries
 var fs         = require('fs');
 var readline   = require('readline');
 var stream     = require('stream');
@@ -12,17 +12,62 @@ var consoleapi = require('../rustyconsole/consoleapi');
 var nodemailer = require('nodemailer');
 var cp         = require("child_process");
 
-// setup some default values
+// Process operational values
+var rusty = {
+  rcon:         rconObj,
+  manifest:     null,       //  Location of Rust server Steam current state
+  manifestDate: new Date(), //  DateTime manufest file was last changed and read
+  buildid:      null,       //  Current buildid of Rust server
+  branch:       null,       //  Development branch of Rust server
+  timer:        null,       //  Delay in miliseconds between main loop cycles
+  operation:    null,       //  Current operational mode of RustyNail
+  config:       null,       //  location/name of configuration file
+  configDate:   new Date(), //  DateTime config file was last changed and read
+  seedDate:     new Date(), //  Previous date of new seed has been saved to the config file
+  emuser:       null,       //  Login username for sending email notifications
+  empass:       null,       //  Login password for sending email notifications
+  emupdate:     false,      //  Email notifications for server updates?
+  emunavail:    false,      //  Email notifications when server is unavailable beyond "ticks" count
+  emailUpdate:  null,       //  List of email address recipients for server update notifications
+  emailUnavail: null,       //  List of email address recipients for server unavailability notifications
+  launchfile:   null,       //  Name of batch file used to start Rust server
+  launchdir:    null,       //  Location of batch file used to start Rust server
+  instance:     null,       //  Rust server name
+  eminstance:   null,       //  Text prefix for email notifications (usally server instance name)
+  unavail:      10,         //  How many main loop cycles a server can be unavailable before sending unavail email notive
+  failsafe:     5,          //  Multiplier x unavail for Rust server to be considered permanently unavailable and needs taskkill
+  autostart:    true,       //  Does script perform Rust server autostart if not already running?
+  autofail:     true,       //  Does script perform Rust server recovery if it permanently stops responding?
+  autoupdate:   true,       //  Does script perform Rust server updating when they become available?
+  announce:     null,       //  Message displayed in-game before server reboots for updates
+  ticks:        5,          //  How many times to send Rust server in-game message to online players
+};
+
+// data used to communicate with the RCON interface
+var rconObj = {
+  socket:   null,   //  Working var for websocket interface
+  server:   null,   //  Default IP address/port for Rust server web RCON
+  password: null,   //  Default web RCON password
+  command:  null,   //  Command to send to Rust server console
+  id:       1,      //  Message id sent along with command; id is sent back with return message
+  json:     null,   //  Return results as JSON, otherwise line-by-line text
+  quiet:    null,   //  Don't display any return message
+};
+
+// Setup some default values
 var defaults = {
-  appID:    `258550`,
-  manifest: `C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf`,
-  timer:    60000,
-  server:   `127.0.0.1:28016`,
-  password: ``,
-  config:   `rustytoolbox.json`,
-  announce: `Update released by Facepunch, server rebooting to update`,
-  ticks:    5,
-  seedDate: new Date(1 + " January 1900"),
+  appID:        `258550`, //  Steam depot id for Rust dedicated server
+  manifest:     `C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf`,
+  timer:        60000,
+  server:       `127.0.0.1:28016`,
+  password:     ``,
+  config:       `rustytoolbox.json`,
+  announce:     `Update released by Facepunch, server rebooting to update`,
+  ticks:        5,
+  seedDate:     new Date(1 + " January 1900"),  // Default dummy value to indicate no previous date of new seed has been saved to the config file
+  autostart:    true,
+  autofail:     true,
+  autoupdate:   true,
 };
 
 var states = {
@@ -33,43 +78,6 @@ var states = {
   UPGRADE:  4,   // server upgrade need detected and announced
   REBOOT:   5,   // server upgrade need detected and initiated
 }
-
-// data used to communicate with the RCON interface
-var rconObj = {
-  socket:   null,
-  server:   null,
-  password: null,
-  command:  null,
-  id:       1,
-  json:     null,
-  quiet:    null,
-};
-
-// process operational values
-var rusty = {
-  rcon:         rconObj,
-  manifest:     null,
-  manifestDate: new Date(),
-  buildid:      null,
-  branch:       null,
-  timer:        null,
-  operation:    null,
-  config:       null,
-  configDate:   new Date(),
-  seedDate:     new Date(),
-  emuser:       null,
-  empass:       null,
-  emupdate:     false,
-  emunavail:    false,
-  emailUpdate:  null,
-  emailUnavail: null,
-  launchfile:   null,
-  launchdir:    null,
-  instance:     null,
-  eminstance:   null,
-  unavail:      10,
-  failsafe:     5,
-};
 
 program
   .version('0.4.0')
@@ -89,6 +97,9 @@ program
   .option('-x, --emunavail',              `enable sending email for unavailability`)
   .option('-l, --launchfile <filename>',  `name of batch file to launch Rust`)
   .option('-m, --launchdir <path>',       `directory of launchfile batch file`)
+  .option('-i, --autostart',              `disable autostart by setting false`)
+  .option('-j, --autofail',               `disable failsafe recovery by setting false`)
+  .option('-k, --autoupdate',             `disable updates by setting false`)
   .option('-f, --forcecfg',               `config file overrides command-line options`)
   .parse(process.argv);
 
@@ -133,7 +144,7 @@ rusty.operation = states.RUNNING;
       } else {
         unavail++;
         // if the Rust server is not actually running, start it
-        if (!(await checkTask(rusty.launchfile))) {
+        if ((!(await checkTask(rusty.launchfile))) && (rusty.autostart)) {
           console.log("Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
           await restartServer();
@@ -141,7 +152,7 @@ rusty.operation = states.RUNNING;
           // snooze the process a bit
           await new Promise((resolve, reject) => setTimeout(() => resolve(), 10000));
         } else {
-          if (unavail >= (rusty.unavail * rusty.failsafe)) {
+          if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log("Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
@@ -157,7 +168,7 @@ rusty.operation = states.RUNNING;
     }
 
     // check if update is detected
-    if (rusty.buildid != steamBuildid) {
+    if ((rusty.buildid != steamBuildid) && (rusty.autoupdate)) {
 
       // new update ready from Facepunch
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
@@ -210,7 +221,7 @@ rusty.operation = states.RUNNING;
           unavail = 0;
         } else {
           unavail++;
-          if (unavail >= (rusty.unavail * rusty.failsafe)) {
+          if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log("Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
@@ -293,6 +304,9 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty, "launchdir");
       setConfig(jsonConfig, rusty, "unavail");
       setConfig(jsonConfig, rusty, "failsafe");
+      setConfig(jsonConfig, rusty, "autostart");
+      setConfig(jsonConfig, rusty, "autofail");
+      setConfig(jsonConfig, rusty, "autoupdate");
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
@@ -345,6 +359,9 @@ function printConfig() {
   console.log(`instance:      ${rusty.instance}`);
   console.log(`unavail:       ${rusty.unavail}`);
   console.log(`failsafe:      ${rusty.failsafe}`);
+  console.log(`autostart:     ${rusty.autostart}`);
+  console.log(`autofail:      ${rusty.autofail}`);
+  console.log(`autoupdate:    ${rusty.autoupdate}`);
   console.log(`buildid:       ${rusty.buildid}`);
   console.log(`branch:        ${rusty.branch}`);
   console.log(`operation:     ${rusty.operation}`);
