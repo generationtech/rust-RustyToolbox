@@ -12,6 +12,27 @@ var consoleapi = require('../rustyconsole/consoleapi');
 var nodemailer = require('nodemailer');
 var cp         = require("child_process");
 
+//  Script operational modes used by state machine design
+var states = {
+  STOP:     0,   // Shut down RustyNail and exit
+  BOOT:     1,   // Startup operations
+  RUNNING:  2,   // Normal operation. checking for updates and server availability
+  ANNOUNCE: 3,   // Server upgrade needed, announce to online players
+  UPGRADE:  4,   // Server upgrade needed and announced, ready to reboot
+  REBOOT:   5,   // Server upgrade needed, announced, rebooted, now watch for server to come back online
+}
+
+//  Data used to communicate with the RCON interface
+var rconObj = {
+  socket:   null,   //  Working var for websocket interface
+  server:   null,   //  Default IP address/port for Rust server web RCON
+  password: null,   //  Default web RCON password
+  command:  null,   //  Command to send to Rust server console
+  id:       1,      //  Message id sent along with command; id is sent back with return message
+  json:     null,   //  Return results as JSON, otherwise line-by-line text
+  quiet:    null,   //  Don't display any return message
+};
+
 //  Process operational values
 var rusty = {
   rcon:         rconObj,
@@ -20,6 +41,7 @@ var rusty = {
   buildid:      null,           //  Current buildid of Rust server
   branch:       null,           //  Development branch of Rust server
   timer:        null,           //  Delay in miliseconds between main loop cycles
+  timeout:      null,           //  Timeout in miliseconds for messages that check Rust server availability
   operation:    states.RUNNING, //  Current operational mode of RustyNail
   config:       null,           //  location/name of configuration file
   configDate:   new Date(),     //  DateTime config file was last changed and read
@@ -43,22 +65,12 @@ var rusty = {
   ticks:        5,              //  How many times to send Rust server in-game message to online players
 };
 
-//  Data used to communicate with the RCON interface
-var rconObj = {
-  socket:   null,   //  Working var for websocket interface
-  server:   null,   //  Default IP address/port for Rust server web RCON
-  password: null,   //  Default web RCON password
-  command:  null,   //  Command to send to Rust server console
-  id:       1,      //  Message id sent along with command; id is sent back with return message
-  json:     null,   //  Return results as JSON, otherwise line-by-line text
-  quiet:    null,   //  Don't display any return message
-};
-
 //  Setup some critical default values
 var defaults = {
   appID:        `258550`,   //  Steam depot id for Rust dedicated server
   manifest:     `C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf`,
   timer:        60000,
+  timeout:      2000,
   server:       `127.0.0.1:28016`,
   password:     ``,
   config:       `rustytoolbox.json`,
@@ -69,16 +81,6 @@ var defaults = {
   autofail:     true,
   autoupdate:   true,
 };
-
-//  Script operational modes used by state machine design
-var states = {
-  STOP:     0,   // Shut down RustyNail and exit
-  BOOT:     1,   // Startup operations
-  RUNNING:  2,   // Normal operation. checking for updates and server availability
-  ANNOUNCE: 3,   // Server upgrade needed, announce to online players
-  UPGRADE:  4,   // Server upgrade needed and announced, ready to reboot
-  REBOOT:   5,   // Server upgrade needed, announced, rebooted, now watch for server to come back online
-}
 
 //  Process command-line options
 program
@@ -102,14 +104,15 @@ program
   .option('-i, --autostart',              `disable autostart by setting false`)
   .option('-j, --autofail',               `disable failsafe recovery by setting false`)
   .option('-k, --autoupdate',             `disable updates by setting false`)
+  .option('-o, --timeout',                `timeout value for RCON availability checks`)
   .option('-f, --forcecfg',               `config file overrides command-line options`)
   .parse(process.argv);
 
-// Most important to know where the config file is located!!!
+//  Most important to know where the config file is located!!!
 rusty.config    = program.config ? program.config : defaults.config;
 
 //
-// MAIN LOOP
+//  MAIN LOOP
 //
 (async ()=> {
   var steamBuildid = null;
@@ -118,10 +121,10 @@ rusty.config    = program.config ? program.config : defaults.config;
 
   while (rusty.operation != states.STOP) {
 
-    // Check if we need to read config values from file
+    //  Check if we need to read config values from file
     await checkConfig(rusty.config);
 
-    // NORMAL RUNNING MODE, check for updates and unavailability
+    //  NORMAL RUNNING MODE, check for updates and unavailability
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {                //  Is online?
         if (unavail >= rusty.unavail) {         //  Was server offline before?
@@ -173,11 +176,11 @@ rusty.config    = program.config ? program.config : defaults.config;
 
     //  MONITOR FOR UPDATES
     if ((rusty.buildid != steamBuildid) && (rusty.autoupdate)) {
-      // New update ready from Facepunch
+      //  New update ready from Facepunch
 
       //  IN-GAME ANNOUNCEMENTS
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
-        // Send Rust in-game messages to those players online
+        //  Send Rust in-game messages to those players online
         if (announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
           console.log(`Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
@@ -204,7 +207,7 @@ rusty.config    = program.config ? program.config : defaults.config;
           rusty.operation = states.REBOOT;
           unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
-          // Get new seed 1st reboot of every 1st Thursday of the month
+          //  Get new seed 1st reboot of every 1st Thursday of the month
           if (isFirstThursday()) {
             checkSeed();
           }
@@ -213,7 +216,7 @@ rusty.config    = program.config ? program.config : defaults.config;
         }
       }
 
-      // MONITOR FOR SERVER REBOOT
+      //  MONITOR FOR SERVER REBOOT
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {                //  Is online?
           if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update to buildid " + steamBuildid);
@@ -237,19 +240,20 @@ rusty.config    = program.config ? program.config : defaults.config;
           }
         }
       }
-      // End server update process
+      //  End server update process
     }
-    // Main loop cycle ends
+    //  Main loop cycle ends
     await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));   //  Snooze the process a bit
   }
   process.exit(0);
 })();
 //
-// END MAIN LOOP
+//  END MAIN LOOP
 //
 
-
 function readFile(file) {
+//  Reads all data from a file and returns the result.
+//  Only good for smaller sized files
   return new Promise(function(resolve, reject) {
     try {
       var data = '';
@@ -267,10 +271,10 @@ function readFile(file) {
 }
 
 async function checkManifest(file) {
-  // try not to waste time re-reading rust server manifest after booting
-  // RustyNail unless the modified date/time changes, which would indicate
-  // the server was updated or re-installed outside of script control
-  // while script was running
+//  Try not to waste time re-reading rust server manifest after booting
+//  RustyNail unless the modified date/time changes, which would indicate
+//  the server was updated or re-installed outside of script control
+//  while script was running
   try {
     var stats = fs.statSync(file)
     if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
@@ -292,14 +296,18 @@ async function checkManifest(file) {
 }
 
 async function checkConfig(file) {
+//  Loads all the script configuration values from either
+//  command-line options, configuration file, or program defaults.
+//  Check config file date/time and reload if the file is updated
   var stats = fs.statSync(file)
   if (stats.mtime.getTime() != rusty.configDate.getTime()) {
     try {
       var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
 
-      // handle standard (easy) config options
+      //  Handle standard (easy) config options
       setConfig(jsonConfig, rusty, "manifest");
       setConfig(jsonConfig, rusty, "timer");
+      setConfig(jsonConfig, rusty, "timeout");
       setConfig(jsonConfig, rusty, "announce");
       setConfig(jsonConfig, rusty, "ticks");
       setConfig(jsonConfig, rusty, "seedDate");
@@ -319,7 +327,7 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
-      // tweaks needed for some config options
+      //  Tweaks needed for some other config options
       if (!rusty.launchdir.match(/.\\$/)) {
         rusty.launchdir += "\\";
       }
@@ -336,6 +344,9 @@ async function checkConfig(file) {
 }
 
 function setConfig(jsonConfig, rustyVar, configKey) {
+//  Decision tree to set a sigle config value from
+//  either command-line, config file, or defaults,
+//  otherwise set to null for novel vars.
   if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
     rustyVar[configKey] = jsonConfig[configKey];
   } else if (program[configKey]) {
@@ -354,6 +365,7 @@ function printConfig() {
   console.log(`manifest:      ${rusty.manifest}`);
   console.log(`manifestDate:  ${rusty.manifestDate}`);
   console.log(`timer:         ${rusty.timer}`);
+  console.log(`timeout:       ${rusty.timeout}`);
   console.log(`announce:      ${rusty.announce}`);
   console.log(`ticks:         ${rusty.ticks}`);
   console.log(`seedDate:      ${rusty.seedDate}`);
@@ -385,6 +397,7 @@ function printConfig() {
 }
 
 function sendEmail(eaddress, esubject, emessage) {
+//  Sends a single notification email from the system
   var transporter = nodemailer.createTransport({
     host:   'smtp.gmail.com',
     port:   465,
@@ -410,12 +423,15 @@ function sendEmail(eaddress, esubject, emessage) {
 }
 
 function sendEmails(elist, esubject, emessage) {
+//  Send emails to a list of recipients
   elist.forEach(function(element) {
       sendEmail(element, esubject, emessage);
   });
 }
 
 async function checkStatus() {
+//  Sends a RCON message to check whether the Rust
+//  server is available and responsive.
   rusty.rcon.command = 'version';
   var retval;
   try {
@@ -428,9 +444,13 @@ async function checkStatus() {
 }
 
 async function status() {
+//  Checks the status of a Rust server. Uses multiple promise calls
+//  in a race function with one as a simple timer. Either the status
+//  message returns in time, or the timeout returns and the entire
+//  reuest is canceled and status is returned as false.
   return await Promise.race([
     consoleapi.sendCommand(rusty.rcon),
-    new Promise(function(resolve, reject) { setTimeout(reject, 2000); })
+    new Promise(function(resolve, reject) { setTimeout(reject, rusty.timeout); })
   ]).then(function(value, reason) {
     if (!value['error']) {
         return true;
@@ -443,9 +463,9 @@ async function status() {
     });
 }
 
-// Gets the name of the Rust server instance. There has to be a simpler
-// way to do this search and string isolation...
 function getInstance() {
+//  Gets the name of the Rust server instance. There has to be a simpler
+//  way to do this search and string isolation...
   return new Promise(function(resolve, reject) {
     try {
       if (rusty.launchfile) {
@@ -454,6 +474,7 @@ function getInstance() {
         var launchfile = readline.createInterface(instream, outstream);
 
         launchfile.on('line', function(line) {
+          //  This seems like a really ugly way to parse the instance name
           var firstString = line.search("server.hostname");
           if (firstString != -1) {
             var secondString = line.slice(firstString+15).replace(/^\s+/, '');
@@ -484,12 +505,12 @@ function getInstance() {
 }
 
 async function findTask(target) {
+//  Result of that command always returns 2 extra pid's, for the wmic process itself.
+//  Create an array of all returned pid's and kill them all. Some will no longer
+//  exist by now of course
   return new Promise(function(resolve, reject) {
-  // Result of that command always returns 2 extra pid's, for the wmic process itself.
-  // Create an array of all returned pid's and kill them all. Some will no longer
-  // exist by now of course
     var query;
-    // this current design only allows one Rust server per windows server login
+    //  This current design only allows one Rust server per Windows server login
     if (target == 'RustDedicated.exe') {
       query = "commandline LIKE '%RustDedicated.exe%'";
     } else {
@@ -513,9 +534,9 @@ async function findTask(target) {
 }
 
 async function checkTask(target) {
+//  When there are 3 or more running tasks, then the single task we're looking
+//  for is running (other pids are artifacts from query itself).
   var res = await findTask(target);
-  // When there are 3 or more running tasks, then the single task we're looking
-  // for is running (other pids are artifacts from query itself)
   if (res.length >= 3) {
     return true;
   }
@@ -523,6 +544,8 @@ async function checkTask(target) {
 }
 
 async function endTask(target) {
+//  Kill each task associated with a pid, probably
+//  some of these will no longer exist beforehand  
   return new Promise(async function(resolve, reject) {
     var pidList = await findTask(target);
     pidList.forEach(function(item) {
