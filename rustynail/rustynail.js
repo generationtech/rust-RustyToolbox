@@ -121,7 +121,7 @@ rusty.config    = program.config ? program.config : defaults.config;
     // Check if we need to read config values from file
     await checkConfig(rusty.config);
 
-    // Normal running state, check for updates and unavailability
+    // NORMAL RUNNING MODE, check for updates and unavailability
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {                //  Is online?
         if (unavail >= rusty.unavail) {         //  Was server offline before?
@@ -171,11 +171,13 @@ rusty.config    = program.config ? program.config : defaults.config;
       }
     }
 
-    //  Check if update is detected
+    //  MONITOR FOR UPDATES
     if ((rusty.buildid != steamBuildid) && (rusty.autoupdate)) {
+      // New update ready from Facepunch
 
-      // new update ready from Facepunch
+      //  IN-GAME ANNOUNCEMENTS
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
+        // Send Rust in-game messages to those players online
         if (announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
           console.log(`Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
@@ -187,12 +189,13 @@ rusty.config    = program.config ? program.config : defaults.config;
           }
           announceTick++;
         } else {
+          //  Trigger actual server update process
           announceTick = 0;
           rusty.operation = states.UPGRADE;
         }
       }
 
-      // ready to reboot for upgrade
+      // SIGNAL UPDATE TO SERVER
       if (rusty.operation == states.UPGRADE) {
         console.log(`Buildid differs, updating server`);
         if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid " + steamBuildid);
@@ -210,14 +213,14 @@ rusty.config    = program.config ? program.config : defaults.config;
         }
       }
 
-      // monitor for server to come back online
+      // MONITOR FOR SERVER REBOOT
       else if (rusty.operation == states.REBOOT) {
-        if (await checkStatus()) {
+        if (await checkStatus()) {                //  Is online?
           if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update to buildid " + steamBuildid);
           console.log('Server back online after update');
           rusty.manifestDate = new Date();
           try {
-            await checkManifest(rusty.manifest);
+            await checkManifest(rusty.manifest);  //  Update buildid & branch from Rust server
           } catch(e) {
             console.log(e)
           }
@@ -225,6 +228,7 @@ rusty.config    = program.config ? program.config : defaults.config;
           unavail = 0;
         } else {
           unavail++;
+          //  Is Rust server permanently unavailable?
           if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log("Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
@@ -233,9 +237,10 @@ rusty.config    = program.config ? program.config : defaults.config;
           }
         }
       }
+      // End server update process
     }
-    // snooze the process a bit
-    await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));
+    // Main loop cycle ends
+    await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));   //  Snooze the process a bit
   }
   process.exit(0);
 })();
