@@ -5,10 +5,6 @@
 //  TBD
 //
 /*
-      Server monitoring:
-        -advanced function to kill/restart rust server. can be used during
-         startup for initial rust server run
-
       Change seed on 1st Thursday upgrade
 
       Log file functionality
@@ -35,6 +31,7 @@ var defaults = {
   config:   `rustytoolbox.json`,
   announce: `Update released by Facepunch, server rebooting to update`,
   ticks:    5,
+  seedDate: new Date(1 + " January 1900"),
 };
 
 var states = {
@@ -68,6 +65,7 @@ var rusty = {
   operation:    null,
   config:       null,
   configDate:   new Date(),
+  seedDate:     new Date(),
   emuser:       null,
   empass:       null,
   emupdate:     false,
@@ -118,9 +116,6 @@ rusty.operation = states.RUNNING;
 
     // check if we need to read config values from file
     await checkConfig(rusty.config);
-
-//console.log(await checkTask(rusty.launchfile));
-//console.log(await checkTask('RustDedicated.exe'));
 
     // normal running state, check for updates
     if (rusty.operation == states.RUNNING) {
@@ -200,6 +195,10 @@ rusty.operation = states.RUNNING;
           rusty.operation = states.REBOOT;
           unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
+          // Get new seed 1st reboot of every 1st Thursday of the month
+          if (isFirstThursday()) {
+            checkSeed();
+          }
         } catch(e) {
           console.log('console command returned error: ' + e)
         }
@@ -208,7 +207,7 @@ rusty.operation = states.RUNNING;
       // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {
-          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update", rusty.eminstance + "back online after update");
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update to buildid " + steamBuildid);
           console.log('Server back online after update');
           rusty.manifestDate = new Date();
           try {
@@ -239,7 +238,7 @@ rusty.operation = states.RUNNING;
 //
 
 
-function readManifest(file) {
+function readFile(file) {
   return new Promise(function(resolve, reject) {
     try {
       var data = '';
@@ -265,7 +264,7 @@ async function checkManifest(file) {
     var stats = fs.statSync(file)
     if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
       try {
-        var data      = await readManifest(file);
+        var data      = await readFile(file);
         let manifest  = vdf.parse(data);
         if (manifest) {
           rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
@@ -292,6 +291,7 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty, "timer");
       setConfig(jsonConfig, rusty, "announce");
       setConfig(jsonConfig, rusty, "ticks");
+      setConfig(jsonConfig, rusty, "seedDate");
       setConfig(jsonConfig, rusty, "emuser");
       setConfig(jsonConfig, rusty, "empass");
       setConfig(jsonConfig, rusty, "emupdate");
@@ -342,6 +342,7 @@ function printConfig() {
   console.log(`timer:         ${rusty.timer}`);
   console.log(`announce:      ${rusty.announce}`);
   console.log(`ticks:         ${rusty.ticks}`);
+  console.log(`seedDate:      ${rusty.seedDate}`);
   console.log(`emuser:        ${rusty.emuser}`);
   console.log(`empass:        ${rusty.empass}`);
   console.log(`emupdate:      ${rusty.emupdate}`);
@@ -526,4 +527,104 @@ async function restartServer() {
   await endTask("RustDedicated.exe");
   await endTask(rusty.launchfile);
   await startRust();
+}
+
+function isFirstThursday() {
+//  console.log(new Date());
+  var todayDay = new Date();
+//  console.log("todayDay: " + todayDay);
+  var targetDay, curDay = 0, i = 1;
+
+  while(curDay < 1 && i < 31) {
+//    console.log("todayDay.getMonth: " + todayDay.getMonth());
+//    console.log("todayDay.getFullYear: " + todayDay.getFullYear());
+    targetDay = new Date(todayDay.getMonth()+1 + " " + ((i++) + 21) + " " + todayDay.getFullYear());
+//    console.log("targetDay: " + targetDay);
+    if(targetDay.getDay() == 2) curDay++;
+  }
+  todayDay  = todayDay.setHours(0,0,0,0);
+  targetDay = targetDay.setHours(0,0,0,0);
+
+  if(todayDay.valueOf() == targetDay.valueOf()) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function checkSeed() {
+  var dateNow = new Date();
+  dateNow     = dateNow.setHours(0,0,0,0);
+  // only set if no pre-existing seed or seed not already set today
+  if ((rusty.seedDate.valueOf() == -2208970800000) || (rusty.seedDate.valueOf() < dateNow.valueOf())) {
+    console.log("Update on 1st Thursday, changing to new seed and salt");
+    var nextSeed = getRandomInt(0, 2147483647);
+    var nextSalt = getRandomInt(0, 2147483647);
+    if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt);
+    newSeed(nextSeed, nextSalt);
+    readWriteConfig(dateNow);
+    rusty.seedDate = dateNow;
+  } else {
+    console.log("not changing seed");
+  }
+}
+
+function getRandomInt(min, max) {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min)) + min;
+}
+
+async function newSeed(seed, salt) {
+  var data     = await readFile(rusty.launchdir + rusty.launchfile);
+  var oldarray = data.trim().split("\r\n");
+
+  oldarray.forEach(function(item, index) {
+    // does this is line containing server startup command line?
+    var firstString = item.search("RustDedicated.exe");
+    if (firstString != -1) {
+      // update or replace the seed and salt values
+      var itemNew     = item.trim();
+      itemNew         = replaceEntry(itemNew, "server.seed", seed);
+      oldarray[index] = replaceEntry(itemNew, "server.salt", salt);
+    }
+  });
+  // write the new commnand line out to the batch file
+  fs.truncate(rusty.launchdir + rusty.launchfile, 0, function() {
+      fs.writeFileSync(rusty.launchdir + rusty.launchfile, oldarray.join("\r\n"), function (err) {
+          if (err) {
+              return console.log("Error writing file: " + err);
+          }
+      });
+  });
+  await restartServer();
+}
+
+function replaceEntry(item, entry, value) {
+  var itemNew = item;
+  // does it contain an existing entry value?
+  var secondString = item.search(entry);
+  if (secondString != -1) {
+    // found existing entry value, updating it
+    var firstItem = item.substring(0, secondString + 11);
+    // add a new entry value
+    itemNew = firstItem + " " + value;
+    // remove all outside whitespace from second part
+    var secondItem = item.substring(secondString + 11).trim();
+    // is there a second part with additional command line entries?
+    var thirdItem = secondItem.match(/\s.*/);
+    if (thirdItem) {
+      // there is addional entries, clean them up and add
+      thirdItem = thirdItem[0].trim();
+      itemNew += " " + thirdItem;
+    }
+  } else {
+    // no existing entry, adding one
+    itemNew += " +" + entry + " " + value;
+  }
+  return itemNew;
+}
+
+function readWriteConfig(seedDate) {
+
 }
