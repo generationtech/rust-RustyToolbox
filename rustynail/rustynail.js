@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Get external libraries
+//  Get external libraries
 var fs         = require('fs');
 var readline   = require('readline');
 var stream     = require('stream');
@@ -12,38 +12,38 @@ var consoleapi = require('../rustyconsole/consoleapi');
 var nodemailer = require('nodemailer');
 var cp         = require("child_process");
 
-// Process operational values
+//  Process operational values
 var rusty = {
   rcon:         rconObj,
-  manifest:     null,       //  Location of Rust server Steam current state
-  manifestDate: new Date(), //  DateTime manufest file was last changed and read
-  buildid:      null,       //  Current buildid of Rust server
-  branch:       null,       //  Development branch of Rust server
-  timer:        null,       //  Delay in miliseconds between main loop cycles
-  operation:    null,       //  Current operational mode of RustyNail
-  config:       null,       //  location/name of configuration file
-  configDate:   new Date(), //  DateTime config file was last changed and read
-  seedDate:     new Date(), //  Previous date of new seed has been saved to the config file
-  emuser:       null,       //  Login username for sending email notifications
-  empass:       null,       //  Login password for sending email notifications
-  emupdate:     false,      //  Email notifications for server updates?
-  emunavail:    false,      //  Email notifications when server is unavailable beyond "ticks" count
-  emailUpdate:  null,       //  List of email address recipients for server update notifications
-  emailUnavail: null,       //  List of email address recipients for server unavailability notifications
-  launchfile:   null,       //  Name of batch file used to start Rust server
-  launchdir:    null,       //  Location of batch file used to start Rust server
-  instance:     null,       //  Rust server name
-  eminstance:   null,       //  Text prefix for email notifications (usally server instance name)
-  unavail:      10,         //  How many main loop cycles a server can be unavailable before sending unavail email notive
-  failsafe:     5,          //  Multiplier x unavail for Rust server to be considered permanently unavailable and needs taskkill
-  autostart:    true,       //  Does script perform Rust server autostart if not already running?
-  autofail:     true,       //  Does script perform Rust server recovery if it permanently stops responding?
-  autoupdate:   true,       //  Does script perform Rust server updating when they become available?
-  announce:     null,       //  Message displayed in-game before server reboots for updates
-  ticks:        5,          //  How many times to send Rust server in-game message to online players
+  manifest:     null,           //  Location of Rust server Steam current state
+  manifestDate: new Date(),     //  DateTime manufest file was last changed and read
+  buildid:      null,           //  Current buildid of Rust server
+  branch:       null,           //  Development branch of Rust server
+  timer:        null,           //  Delay in miliseconds between main loop cycles
+  operation:    states.RUNNING, //  Current operational mode of RustyNail
+  config:       null,           //  location/name of configuration file
+  configDate:   new Date(),     //  DateTime config file was last changed and read
+  seedDate:     new Date(),     //  Previous date of new seed has been saved to the config file
+  emuser:       null,           //  Login username for sending email notifications
+  empass:       null,           //  Login password for sending email notifications
+  emupdate:     false,          //  Email notifications for server updates?
+  emunavail:    false,          //  Email notifications when server is unavailable beyond "ticks" count
+  emailUpdate:  null,           //  List of email address recipients for server update notifications
+  emailUnavail: null,           //  List of email address recipients for server unavailability notifications
+  launchfile:   null,           //  Name of batch file used to start Rust server
+  launchdir:    null,           //  Location of batch file used to start Rust server
+  instance:     null,           //  Rust server name
+  eminstance:   null,           //  Text prefix for email notifications (usally server instance name)
+  unavail:      10,             //  How many main loop cycles a server can be unavailable before sending unavail email notive
+  failsafe:     5,              //  Multiplier x unavail for Rust server to be considered permanently unavailable and needs taskkill
+  autostart:    true,           //  Does script perform Rust server autostart if not already running?
+  autofail:     true,           //  Does script perform Rust server recovery if it permanently stops responding?
+  autoupdate:   true,           //  Does script perform Rust server updating when they become available?
+  announce:     null,           //  Message displayed in-game before server reboots for updates
+  ticks:        5,              //  How many times to send Rust server in-game message to online players
 };
 
-// data used to communicate with the RCON interface
+//  Data used to communicate with the RCON interface
 var rconObj = {
   socket:   null,   //  Working var for websocket interface
   server:   null,   //  Default IP address/port for Rust server web RCON
@@ -54,9 +54,9 @@ var rconObj = {
   quiet:    null,   //  Don't display any return message
 };
 
-// Setup some default values
+//  Setup some critical default values
 var defaults = {
-  appID:        `258550`, //  Steam depot id for Rust dedicated server
+  appID:        `258550`,   //  Steam depot id for Rust dedicated server
   manifest:     `C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf`,
   timer:        60000,
   server:       `127.0.0.1:28016`,
@@ -64,23 +64,25 @@ var defaults = {
   config:       `rustytoolbox.json`,
   announce:     `Update released by Facepunch, server rebooting to update`,
   ticks:        5,
-  seedDate:     new Date(1 + " January 1900"),  // Default dummy value to indicate no previous date of new seed has been saved to the config file
+  seedDate:     new Date(1 + " January 1900"),  //  Default dummy value to indicate no previous date of new seed has been saved to the config file
   autostart:    true,
   autofail:     true,
   autoupdate:   true,
 };
 
+//  Script operational modes used by state machine design
 var states = {
-  STOP:     0,   // shut down rustynail and exit
-  BOOT:     1,   // startup operations
-  RUNNING:  2,   // normal operation. checking for updates and server availability
-  ANNOUNCE: 3,   // server upgrade need detected and announcing
-  UPGRADE:  4,   // server upgrade need detected and announced
-  REBOOT:   5,   // server upgrade need detected and initiated
+  STOP:     0,   // Shut down RustyNail and exit
+  BOOT:     1,   // Startup operations
+  RUNNING:  2,   // Normal operation. checking for updates and server availability
+  ANNOUNCE: 3,   // Server upgrade needed, announce to online players
+  UPGRADE:  4,   // Server upgrade needed and announced, ready to reboot
+  REBOOT:   5,   // Server upgrade needed, announced, rebooted, now watch for server to come back online
 }
 
+//  Process command-line options
 program
-  .version('0.4.0')
+  .version('0.5.0')
   .usage('[options]')
   .option('-c, --config <file>' ,         `path and filename of optional config file`)
   .option('-s, --server <host:port>' ,    `server IP address:port`)
@@ -103,8 +105,8 @@ program
   .option('-f, --forcecfg',               `config file overrides command-line options`)
   .parse(process.argv);
 
+// Most important to know where the config file is located!!!
 rusty.config    = program.config ? program.config : defaults.config;
-rusty.operation = states.RUNNING;
 
 //
 // MAIN LOOP
@@ -116,24 +118,24 @@ rusty.operation = states.RUNNING;
 
   while (rusty.operation != states.STOP) {
 
-    // check if we need to read config values from file
+    // Check if we need to read config values from file
     await checkConfig(rusty.config);
 
-    // normal running state, check for updates
+    // Normal running state, check for updates and unavailability
     if (rusty.operation == states.RUNNING) {
-      if (await checkStatus()) {
-        if (unavail >= rusty.unavail) {
+      if (await checkStatus()) {                //  Is online?
+        if (unavail >= rusty.unavail) {         //  Was server offline before?
           console.log("Server back online after being unresponsive");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "back online after being unresponsive", rusty.eminstance + "back online after being unresponsive");
         }
         unavail = 0;
         try {
-          await checkManifest(rusty.manifest);
+          await checkManifest(rusty.manifest);  //  Update buildid & branch from Rust server
         } catch(e) {
           console.log(e)
         }
         try {
-          if (rusty.branch) {
+          if (rusty.branch) {                   //  Get the current distribution Rust server buildid from Steam
             let retval = await branchapi.getBuildID(defaults.appID, rusty.branch);
             if (retval) steamBuildid = retval;
           }
@@ -143,21 +145,23 @@ rusty.operation = states.RUNNING;
         console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
         unavail++;
-        // if the Rust server is not actually running, start it
+        //  If the Rust server is not actually running, start it
         if ((!(await checkTask(rusty.launchfile))) && (rusty.autostart)) {
           console.log("Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
           await restartServer();
           unavail = 0;
-          // snooze the process a bit
+          //  Snooze the process a bit
           await new Promise((resolve, reject) => setTimeout(() => resolve(), 10000));
         } else {
+          //  Is Rust server permanently unavailable?
           if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log("Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
             unavail = 0;
           } else {
+            //  Rust server is temporarily unavailable
             console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
             if (unavail == rusty.unavail) {
               if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
@@ -167,7 +171,7 @@ rusty.operation = states.RUNNING;
       }
     }
 
-    // check if update is detected
+    //  Check if update is detected
     if ((rusty.buildid != steamBuildid) && (rusty.autoupdate)) {
 
       // new update ready from Facepunch
@@ -259,7 +263,7 @@ function readFile(file) {
 
 async function checkManifest(file) {
   // try not to waste time re-reading rust server manifest after booting
-  // rustynail unless the modified date/time changes, which would indicate
+  // RustyNail unless the modified date/time changes, which would indicate
   // the server was updated or re-installed outside of script control
   // while script was running
   try {
