@@ -15,9 +15,11 @@ Monitoring system that manages Rust dedicated server availability and updates
 
 5. Monitors Steam for Rust server updates and <b>triggers the update cycle on the local Rust server</b>.
 
-6. Includes email notifications for Rust server availability and update activity.
+6. On 1st Thursday of the month, <b>changes the Rust server seed & salt</b> when updated received by Facepunch.
 
-7. Most every option is customizable through a JSON-formatted config file or command-line options. Changing the config file while the application is running causes RustyNail to reload the new config and adjust operations without requiring a restart.
+7. Includes email notifications for Rust server availability and update activity.
+
+8. Most every option is customizable through a JSON-formatted config file or command-line options. Changing the config file while the application is running causes RustyNail to reload the new config and adjust operations without requiring a restart.
 
 #### [RustyConsole](rustyconsole/)
 Sends Rust server console command from Windows command line through networked web RCON. It's a one-and-done style of sending commands
