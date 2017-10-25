@@ -214,7 +214,7 @@ rusty.operation = states.RUNNING;
       // monitor for server to come back online
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {
-          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update");
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update to buildid " + steamBuildid);
           console.log('Server back online after update');
           rusty.manifestDate = new Date();
           try {
@@ -580,52 +580,54 @@ function getRandomInt(min, max) {
 }
 
 async function newSeed(seed, salt) {
-
   var data = await readFile(rusty.launchdir + rusty.launchfile);
-//  console.log("data: " + data);
 
   var oldarray = data.trim().split("\r\n");
   console.log("oldarray: " + oldarray);
   console.log();
 
-//  console.log("array elements");
   oldarray.forEach(function(item, index) {
+    // does this is line containing server startup command line?
     var firstString = item.search("RustDedicated.exe");
     if (firstString != -1) {
-      var secondString = item.search("server.seed");
-      if (secondString != -1) {
-        var firstItem = item.substring(0, secondString + 11);
-//        console.log("secondString: " + secondString);
-        console.log("firstItem: " + firstItem);
-        console.log();
-        var secondItem = item.substring(secondString + 11).trim();
-        item = firstItem + " " + seed;
-        console.log("secondItem: " + secondItem);
-        console.log();
-        var thirdItem = secondItem.match(/\s.*/);
-        if (thirdItem) {
-          thirdItem = thirdItem[0].trim();
-          console.log("thirdItem: " + thirdItem);
-          console.log();
-          item += " " + thirdItem;
-        }
-        oldarray[index] = item;
-      } else {
-
-      }
-
-      var secondString = item.search("server.salt");
-      if (firstString != -1) {
-
-      } else {
-
-      }
-
+      // update or replace the seed and salt values
+      var itemNew     = item.trim();
+      itemNew         = replaceEntry(itemNew, "server.seed", seed);
+      oldarray[index] = replaceEntry(itemNew, "server.salt", salt);
     }
-//    console.log(item);
   });
   console.log("oldarray: " + oldarray);
+}
 
+function replaceEntry(item, entry, value) {
+  var itemNew = item;
+  // does it contain an existing seed value?
+  var secondString = item.search(entry);
+  if (secondString != -1) {
+    // found existing seed value, updating it
+    var firstItem = item.substring(0, secondString + 11);
+    console.log("firstItem: " + firstItem);
+    console.log();
+    // add a new seed value
+    itemNew = firstItem + " " + value;
+    // remove all outside whitespace from second part
+    var secondItem = item.substring(secondString + 11).trim();
+    console.log("secondItem: " + secondItem);
+    console.log();
+    // is there a second part with additional command line entries?
+    var thirdItem = secondItem.match(/\s.*/);
+    if (thirdItem) {
+      // there is addional entries, clean them up and add
+      thirdItem = thirdItem[0].trim();
+      console.log("thirdItem: " + thirdItem);
+      console.log();
+      itemNew += " " + thirdItem;
+    }
+  } else {
+    // no existing seed, adding one
+    itemNew += " +" + entry + " " + value;
+  }
+  return itemNew;
 }
 
 function readWriteConfig(seedDate) {
