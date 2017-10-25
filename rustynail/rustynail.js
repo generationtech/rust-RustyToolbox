@@ -507,7 +507,7 @@ function getInstance() {
 async function findTask(target) {
 //  Result of that command always returns 2 extra pid's, for the wmic process itself.
 //  Create an array of all returned pid's and kill them all. Some will no longer
-//  exist by now of course
+//  exist by now of course.
   return new Promise(function(resolve, reject) {
     var query;
     //  This current design only allows one Rust server per Windows server login
@@ -545,7 +545,7 @@ async function checkTask(target) {
 
 async function endTask(target) {
 //  Kill each task associated with a pid, probably
-//  some of these will no longer exist beforehand  
+//  some of these will no longer exist beforehand.
   return new Promise(async function(resolve, reject) {
     var pidList = await findTask(target);
     pidList.forEach(function(item) {
@@ -570,6 +570,8 @@ async function restartServer() {
 }
 
 function isFirstThursday() {
+//  Could be made more generic, but to start, just
+//  check if today is 1st Thursday of the month.
   var todayDay = new Date();
   var targetDay, curDay = 0, i = 1;
 
@@ -577,7 +579,7 @@ function isFirstThursday() {
     targetDay = new Date(todayDay.getMonth()+1 + " " + i++ + " " + todayDay.getFullYear());
     if(targetDay.getDay() == 4) curDay++;
   }
-  todayDay  = todayDay.setHours(0,0,0,0);
+  todayDay  = todayDay.setHours(0,0,0,0);   //  Only need to match day
   targetDay = targetDay.setHours(0,0,0,0);
 
   if(todayDay.valueOf() == targetDay.valueOf()) {
@@ -588,13 +590,15 @@ function isFirstThursday() {
 }
 
 function checkSeed() {
+//  Set a new seed in the Rust server launching batch file. Only
+//  set if no pre-existing seed or seed not already set today, like
+//  on 1st Thurday where Facepunch releases extra updates that same day)
   var dateNow = new Date();
   dateNow     = dateNow.setHours(0,0,0,0);
-  // only set if no pre-existing seed or seed not already set today
   if ((rusty.seedDate.valueOf() == -2208970800000) || (rusty.seedDate.valueOf() < dateNow.valueOf())) {
     console.log("Update on 1st Thursday, changing to new seed and salt");
     var nextSeed = getRandomInt(0, 2147483647);
-    var nextSalt = getRandomInt(0, 2147483647);
+    var nextSalt = getRandomInt(0, 2147483647);   //  Hope this range is OK for salt value, couldn't find reference
     if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt);
     rusty.seedDate = dateNow;
     readWriteConfig(dateNow);
@@ -609,20 +613,21 @@ function getRandomInt(min, max) {
 }
 
 async function newSeed(seed, salt) {
+//  Save the new seed and salt in the launch file batch file.
   var data     = await readFile(rusty.launchdir + rusty.launchfile);
   var oldarray = data.trim().split("\r\n");
 
   oldarray.forEach(function(item, index) {
-    // does this is line containing server startup command line?
+    //  Does this is line containing server startup command line?
     var firstString = item.search("RustDedicated.exe");
     if (firstString != -1) {
-      // update or replace the seed and salt values
+      //  Update or replace the seed and salt values
       var itemNew     = item.trim();
       itemNew         = replaceEntry(itemNew, "server.seed", seed);
       oldarray[index] = replaceEntry(itemNew, "server.salt", salt);
     }
   });
-  // write the new commnand line out to the batch file
+  //  Write the new commnand line out to the batch file
   fs.truncate(rusty.launchdir + rusty.launchfile, 0, function() {
       fs.writeFileSync(rusty.launchdir + rusty.launchfile, oldarray.join("\r\n"), function (err) {
           if (err) {
@@ -634,6 +639,8 @@ async function newSeed(seed, salt) {
 }
 
 function replaceEntry(item, entry, value) {
+//  Replace an individual entry in the Rust batch file
+//  launcher command-line. If doesn't already exist, add it to the end.
   var itemNew = item;
   // does it contain an existing entry value?
   var secondString = item.search(entry);
@@ -659,6 +666,7 @@ function replaceEntry(item, entry, value) {
 }
 
 function readWriteConfig(seedDate) {
+//  Update the config file with the date the seed & salt were updated.  
   var jsonConfig = JSON.parse(fs.readFileSync(rusty.config, 'utf8'));
   jsonConfig.seedDate = seedDate;
 
