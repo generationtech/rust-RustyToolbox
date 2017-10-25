@@ -3,7 +3,21 @@
 Set of tools to help manage Facepunch Rust servers from Windows command line
 
 #### [RustyNail](rustynail/)
-Monitor Steam for Rust server updates and notify a Rust server to update itself
+Monitoring system that manages Rust dedicated server availability and updates
+
+1. An always-on application to handle a Rust server's lifecycle.
+
+2. When launched, if a Rust server is not running, RustyNail starts it using the normal batch file containing standard Rust server command-line options.
+
+3. Monitors Rust server availability and <b>checks for lock-ups, crashes, or downtime</b>.
+
+4. If the Rust server is offline (server process is not running), RustyNail will start the server. If the server is running, but locked up or otherwise unresponsive, it will <b>endtask the Rust server and restart it</b>.
+
+5. Monitors Steam for Rust server updates and <b>triggers the update cycle on the local Rust server</b>.
+
+6. Includes email notifications for Rust server availability and update activity.
+
+7. Most every option is customizable through a JSON-formatted config file or command-line options. Changing the config file while the application is running causes RustyNail to reload the new config and adjust operations without requiring a restart.
 
 #### [RustyConsole](rustyconsole/)
 Sends Rust server console command from Windows command line through networked web RCON. It's a one-and-done style of sending commands
