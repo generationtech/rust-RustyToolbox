@@ -15,7 +15,7 @@ Monitoring system that manages Rust dedicated server availability and updates
 
 5. Monitors Steam for Rust server updates and <b>triggers the update cycle on the local Rust server</b>.
 
-6. On 1st Thursday of the month, <b>changes the Rust server seed & salt</b> when updated received by Facepunch.
+6. On 1st Thursday of the month, <b>changes the Rust server seed & salt</b> when update received by Facepunch.
 
 7. Includes email notifications for Rust server availability and update activity.
 
