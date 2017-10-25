@@ -1,15 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-//
-//  TBD
-//
-/*
-      Change seed on 1st Thursday upgrade
-
-      Log file functionality
-*/
-
 // get external libraries
 var fs         = require('fs');
 var readline   = require('readline');
@@ -530,17 +521,12 @@ async function restartServer() {
 }
 
 function isFirstThursday() {
-//  console.log(new Date());
   var todayDay = new Date();
-//  console.log("todayDay: " + todayDay);
   var targetDay, curDay = 0, i = 1;
 
   while(curDay < 1 && i < 31) {
-//    console.log("todayDay.getMonth: " + todayDay.getMonth());
-//    console.log("todayDay.getFullYear: " + todayDay.getFullYear());
-    targetDay = new Date(todayDay.getMonth()+1 + " " + ((i++) + 21) + " " + todayDay.getFullYear());
-//    console.log("targetDay: " + targetDay);
-    if(targetDay.getDay() == 2) curDay++;
+    targetDay = new Date(todayDay.getMonth()+1 + " " + i++ + " " + todayDay.getFullYear());
+    if(targetDay.getDay() == 4) curDay++;
   }
   todayDay  = todayDay.setHours(0,0,0,0);
   targetDay = targetDay.setHours(0,0,0,0);
@@ -561,11 +547,9 @@ function checkSeed() {
     var nextSeed = getRandomInt(0, 2147483647);
     var nextSalt = getRandomInt(0, 2147483647);
     if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt);
-    newSeed(nextSeed, nextSalt);
-    readWriteConfig(dateNow);
     rusty.seedDate = dateNow;
-  } else {
-    console.log("not changing seed");
+    readWriteConfig(dateNow);
+    newSeed(nextSeed, nextSalt);
   }
 }
 
@@ -626,5 +610,13 @@ function replaceEntry(item, entry, value) {
 }
 
 function readWriteConfig(seedDate) {
+  var jsonConfig = JSON.parse(fs.readFileSync(rusty.config, 'utf8'));
+  jsonConfig.seedDate = seedDate;
 
+  fs.writeFileSync(rusty.config, JSON.stringify(jsonConfig, null, 4), 'utf8', function (err) {
+      if (err) {
+          return console.log(err);
+      }
+      console.log("The file was saved!");
+  });
 }
