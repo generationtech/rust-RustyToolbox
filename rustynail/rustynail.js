@@ -91,6 +91,15 @@ var defaults = {
   ticks:        5,
 };
 
+var datetimeOptions = {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit'
+};
+
+
 //  Process command-line options
 program
   .version('0.5.0')
@@ -137,7 +146,7 @@ rusty.config    = program.config ? program.config : defaults.config;
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {                //  Is online?
         if (unavail >= rusty.unavail) {         //  Was server offline before?
-          console.log("Server back online after being unresponsive");
+          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server back online after being unresponsive");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "back online after being unresponsive", rusty.eminstance + "back online after being unresponsive");
         }
         unavail = 0;
@@ -154,12 +163,12 @@ rusty.config    = program.config ? program.config : defaults.config;
         } catch(e) {
           console.log(e)
         }
-        console.log(`Server: ${rusty.buildid} Steam: ${steamBuildid}`);
+        console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Server: ${rusty.buildid} Steam: ${steamBuildid}`);
       } else {
         unavail++;
         //  If the Rust server is not actually running, start it
         if ((!(await checkTask(rusty.launchfile))) && (rusty.autostart)) {
-          console.log("Server was not running, starting now");
+          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
           await restartServer();
           unavail = 0;
@@ -168,13 +177,13 @@ rusty.config    = program.config ? program.config : defaults.config;
         } else {
           //  Is Rust server permanently unavailable?
           if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
-            console.log("Server fatal unresponsive, killing task");
+            console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
             unavail = 0;
           } else {
             //  Rust server is temporarily unavailable
-            console.log("Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
+            console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
             if (unavail == rusty.unavail) {
               if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
             }
@@ -192,7 +201,7 @@ rusty.config    = program.config ? program.config : defaults.config;
         //  Send Rust in-game messages to those players online
         if (announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
-          console.log(`Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
+          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
           rusty.rcon.command = 'say "Build_ID ' + steamBuildid + ' - '  + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - announceTick) + ' seconds)"';
           try {
             let retval = await consoleapi.sendCommand(rusty.rcon);
@@ -209,14 +218,14 @@ rusty.config    = program.config ? program.config : defaults.config;
 
       // SIGNAL UPDATE TO SERVER
       if (rusty.operation == states.UPGRADE) {
-        console.log(`Buildid differs, updating server`);
+        console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid differs, updating server`);
         if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid " + steamBuildid);
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
           unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
-          //  Get new seed 1st reboot of every 1st Thursday of the month
+          //  Get new seed 1st update-caused reboot of every 1st Thursday of the month
           if (isFirstThursday()) {
             checkSeed();
           }
@@ -229,7 +238,7 @@ rusty.config    = program.config ? program.config : defaults.config;
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {                //  Is online?
           if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update to buildid " + steamBuildid);
-          console.log('Server back online after update');
+          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ':  Server back online after update');
           rusty.manifestDate = new Date();
           try {
             await checkManifest(rusty.manifest);  //  Update buildid & branch from Rust server
@@ -242,7 +251,7 @@ rusty.config    = program.config ? program.config : defaults.config;
           unavail++;
           //  Is Rust server permanently unavailable?
           if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
-            console.log("Server fatal unresponsive, killing task");
+            console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
             unavail = 0;
@@ -428,7 +437,7 @@ function sendEmail(eaddress, esubject, emessage) {
     if (error) {
       console.log(error);
     } else {
-      console.log('Emailed: ' + eaddress);
+      console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ':  Emailed: ' + eaddress);
     }
   });
 }
@@ -607,7 +616,7 @@ function checkSeed() {
   var dateNow = new Date();
   dateNow     = dateNow.setHours(0,0,0,0);
   if ((rusty.seedDate.valueOf() == -2208970800000) || (rusty.seedDate.valueOf() < dateNow.valueOf())) {
-    console.log("Update on 1st Thursday, changing to new seed and salt");
+    console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Update on 1st Thursday, changing to new seed and salt");
     var nextSeed = getRandomInt(0, 2147483647);
     var nextSalt = getRandomInt(0, 2147483647);   //  Hope this range is OK for salt value, couldn't find reference
     if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt);
@@ -685,6 +694,5 @@ function readWriteConfig(seedDate) {
       if (err) {
           return console.log(err);
       }
-      console.log("The file was saved!");
   });
 }
