@@ -11,9 +11,9 @@ Monitoring system that manages Rust dedicated server availability and updates
 
 3. Monitors Rust server availability and <b>checks for lock-ups, crashes, or downtime</b>.
 
-4. If the Rust server is offline (server process is not running), RustyNail will start the server. If the server is running, but locked up or otherwise unresponsive, <b>endtask the Rust server and restarts it</b>.
+4. If the Rust server is offline (server process is not running), RustyNail will start the server. If the server is running, but locked up or otherwise unresponsive, <b>endtask the Rust server and restart it</b>.
 
-5. Monitors Steam for Rust server updates and <b>triggers the update cycle on the local Rust server</b>.
+5. Monitors Steam for Rust server updates and <b>triggers an update cycle on the local Rust server</b>.
 
 6. On 1st Thursday of the month, <b>changes the Rust server seed & salt</b> when update received by Facepunch.
 
