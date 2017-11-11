@@ -2,7 +2,7 @@
 
 Monitor Steam for Rust server updates and notify a Rust server to update itself
 
-#### Usage:
+### Usage:
 
 ```
 Usage: rustynail [options]
@@ -33,7 +33,9 @@ Options:
   -h, --help                    output usage information
 ```
 
-Uses a config file if present. If during RustyNail operation the config file changes, the program will re-read the config file and make adjustments as needed. Any command-line options override config file entries unless `--forcecfg` is specified
+##### Config File
+
+Uses a JSON config file if present. Options are named the same as command-line ones and merged with those command line options (`--forcecfg` causes config file to take precedence over command-line options if there are conflicts). During RustyNail operation, if the file changes, application will re-read config file and make adjustments as needed.
 
 `rustytoolbox.json`
 
@@ -52,12 +54,18 @@ Uses a config file if present. If during RustyNail operation the config file cha
 }
 ```
 
-#### Requirements:
+### Requirements:
 
-1. Runs on Windows systems and only manages Rust server running on Windows systems
+1. Windows Operation system
 
-#### Rust server:
-The Rust server needs to be started with a \*.bat file that infinite loops through update-run-update sequence for RustyNail to work. Also, runs the update twice, because occasionally, the first run of the Steam update process leaves this file missing: `C:\Rust\Server\rustds\steamapps\appmanifest_258550.acf`
+2. Nodejs installed
+
+3. For email notifications, outbound ports required by your email server
+
+4. Currently only manages a single Rust server instance per Windows server install
+
+##### Rust server
+The Rust server needs to be started with a \*.bat file (usually this is `Run_DS.bat`) that infinite loops through update-run-update sequence for RustyNail to work. Also, runs the update twice, because occasionally, the first run of the Steam update process leaves this file missing: `C:\Rust\Server\rustds\steamapps\appmanifest_258550.acf`
 
 `Run_DS.bat`
 ```
@@ -84,3 +92,17 @@ force_install_dir ../rustds
 app_update 258550 validate
 quit
 ```
+
+### Future Enhancements:
+
+1. More flexible scheduled seed/salt changes besides 1st update from Facepunch on the 1st Thursday of the month
+
+2. More precise checking for need to change seed/salt. Current design just changes seed when 1st update comes out; does not actually check for network++ and forced-wipe caused by Facepunch. In general, would prefer to only change seed/salt when planned by RustyNail user or when unplanned forced-wipe by Facepunch.
+
+3. Staged updating dependency where Rust server update requires client upgrade. Goal is to have RustyNail delay initiating a Rust server update cycle which requires a corresponding Rust client update until the client update has been released by Facepunch. This helps to prevent users running staging-branch from instantly loading into new server version before the greater Rust user population clients are upgraded...
+
+4. Ability to manage multiple Rust server instances running on a single Windows installation
+
+5. More flexible in-game announcement messages, especially message just before planned reboot. Current design allows countdown messages ("rebooting in 1 minute"), but unable to send last message immediately before reboot action ("rebooting now").
+
+6. Linux version
