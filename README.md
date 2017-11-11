@@ -40,7 +40,3 @@ Developed with nodejs 8.6.0
 4. Run `npm link` to create a global command link
 
 5. A copy of `steamcmd.exe` is included with our GitHub repo and should update itself when ran by the RustyToolbox utilities. If not, you can install a current version yourself by downloading it from [here](https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip) and unzipping to `steam/` . Do <b>not</b> use the `steam/` directory from your Rust server or any other active Steam game installation
-
-#### Config:
-
-Rusty* applications can be executed using command-line options and/or options read from a config file. Default is to read from `rustytoolbox.json` in the current directory. When used by RustyNail, if the config file is changed while application is running, it will re-read the file, compute effective options between command-line and config file, and adjust operation as needed.
