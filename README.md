@@ -43,4 +43,4 @@ Developed with nodejs 8.6.0
 
 #### Config:
 
-Commands can be executed using command-line options or read from a config file. Default is to read from `rustytoolbox.json` in current directory. When used by RustyNail, if the config file is changed while application is running, it will re-read the config and adjust operation as needed.
+Rusty* applications can be executed using command-line options and/or options read from a config file. Default is to read from `rustytoolbox.json` in the current directory. When used by RustyNail, if the config file is changed while application is running, it will re-read the file, compute effective options between command-line and config file, and adjust operation as needed.
