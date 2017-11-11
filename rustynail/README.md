@@ -99,7 +99,7 @@ quit
 
 2. More precise checking for need to change seed/salt. Current design just changes seed when 1st update comes out; does not actually check for network++ and forced-wipe caused by Facepunch. In general, would prefer to only change seed/salt when planned by RustyNail user or when unplanned forced-wipe by Facepunch.
 
-3. Staged updating dependency where Rust server update requires client upgrade. Goal is to have RustyNail delay initiating a Rust server update cycle which requires a corresponding Rust client update until the client update has been released by Facepunch. This helps to prevent users running staging-branch from instantly loading into new server version before the greater Rust user population clients are upgraded...
+3. Staged updating dependency when Rust server update requires client upgrade. Goal is to have RustyNail delay initiating a Rust server update cycle which requires a corresponding Rust client update until the client update has been released by Facepunch. This helps to prevent users running staging-branch from instantly loading into new server version before the greater population of Rust clients are upgraded...
 
 4. Ability to manage multiple Rust server instances running on a single Windows installation
 
