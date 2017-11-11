@@ -11,7 +11,7 @@ Monitoring system that manages Rust dedicated server availability and updates
 
 3. Monitors Rust server availability and <b>checks for lock-ups, crashes, or downtime</b>.
 
-4. If the Rust server is offline (server process is not running), RustyNail will start the server. If the server is running, but locked up or otherwise unresponsive, it will <b>endtask the Rust server and restart it</b>.
+4. If the Rust server is offline (server process is not running), RustyNail will start the server. If the server is running, but locked up or otherwise unresponsive, <b>endtask's the Rust server and restarts it</b>.
 
 5. Monitors Steam for Rust server updates and <b>triggers the update cycle on the local Rust server</b>.
 
@@ -43,4 +43,4 @@ Developed with nodejs 8.6.0
 
 #### Config:
 
-Commands can be executed using command-line options or read from a config file. Default is to read from `rustytoolbox.json` in current directory. When used by RustyNail, if the config file is changed while the program is running, it'll re-read the config and adjust operation as needed.
+Commands can be executed using command-line options or read from a config file. Default is to read from `rustytoolbox.json` in current directory. When used by RustyNail, if the config file is changed while application is running, it will re-read the config and adjust operation as needed.

@@ -35,7 +35,7 @@ Options:
 
 ##### Config File
 
-Uses a JSON config file if present. Options are named the same as command-line ones and merged with those command line options (`--forcecfg` causes config file to take precedence over command-line options if there are conflicts). During RustyNail operation, if the file changes, application will re-read config file and make adjustments as needed.
+Uses a JSON config file if present. Options are named the same as command-line ones and merged with those command-line options (`--forcecfg` causes config file to take precedence over command-line options if there are conflicts). During RustyNail operation, if the file changes, application will re-read config file and make adjustments as needed.
 
 `rustytoolbox.json`
 
