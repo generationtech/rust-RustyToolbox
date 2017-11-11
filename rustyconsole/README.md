@@ -17,3 +17,7 @@ Options:
   -q, --quiet                suppress output
   -h, --help                 output usage information
 ```
+
+### Future Enhancements:
+
+1. Current design does not allow rapidly sending multiple RustyConsole command-line executions. There needs to be a slight delay between each RustyNail execution by calling application. This seems to be caused by difficulty in quickly closing websocket connection to Rust server. 
