@@ -56,6 +56,7 @@ var rusty = {
   instance:     null,           //  Rust server name
   launchfile:   null,           //  Name of batch file used to start Rust server
   launchdir:    null,           //  Location of batch file used to start Rust server
+  launchexec:   null,           //  Sub-location to the Rust server executable
   autostart:    true,           //  Does script perform Rust server autostart if not already running?
   autofail:     true,           //  Does script perform Rust server recovery if it permanently stops responding?
   autoupdate:   true,           //  Does script perform Rust server updating when they become available?
@@ -110,6 +111,7 @@ program
   .option('-m, --manifest <path>',        `location of manifest file`)
   .option('-l, --launchfile <filename>',  `name of batch file to launch Rust`)
   .option('-m, --launchdir <path>',       `directory of launchfile batch file`)
+  .option('-e, --launchexec <path>',      `sub-directory/path of Rust executable`)
   .option('-i, --autostart',              `disable autostart by setting false`)
   .option('-j, --autofail',               `disable failsafe recovery by setting false`)
   .option('-k, --autoupdate',             `disable updates by setting false`)
@@ -327,6 +329,7 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty, "seedDate");
       setConfig(jsonConfig, rusty, "launchfile");
       setConfig(jsonConfig, rusty, "launchdir");
+      setConfig(jsonConfig, rusty, "launchexec");
       setConfig(jsonConfig, rusty, "autostart");
       setConfig(jsonConfig, rusty, "autofail");
       setConfig(jsonConfig, rusty, "autoupdate");
@@ -346,10 +349,6 @@ async function checkConfig(file) {
       setConfig(jsonConfig, rusty.rcon, "server");
       setConfig(jsonConfig, rusty.rcon, "password");
 
-      //  Tweaks needed for some other config options
-      if (!rusty.launchdir.match(/.\\$/)) {
-        rusty.launchdir += "\\";
-      }
       rusty.instance   = await getInstance();
       rusty.eminstance = rusty.instance ? rusty.instance + ": " : "Server ";
       rusty.configDate = stats.mtime;
@@ -397,6 +396,7 @@ function printConfig() {
   console.log(`instance:      ${rusty.instance}`);
   console.log(`launchfile:    ${rusty.launchfile}`);
   console.log(`launchdir:     ${rusty.launchdir}`);
+  console.log(`launchexec:    ${rusty.launchexec}`);
   console.log(`autostart:     ${rusty.autostart}`);
   console.log(`autofail:      ${rusty.autofail}`);
   console.log(`autoupdate:    ${rusty.autoupdate}`);
@@ -489,7 +489,7 @@ function getInstance() {
   return new Promise(function(resolve, reject) {
     try {
       if (rusty.launchfile) {
-        var instream   = fs.createReadStream(rusty.launchdir + rusty.launchfile);
+        var instream   = fs.createReadStream(rusty.launchdir + "\\" + rusty.launchfile);
         var outstream  = new stream;
         var launchfile = readline.createInterface(instream, outstream);
 
@@ -524,28 +524,27 @@ function getInstance() {
   });
 }
 
-async function findTask(target) {
-//  Result of that command always returns 2 extra pid's, for the wmic process itself.
-//  Create an array of all returned pid's and kill them all. Some will no longer
-//  exist by now of course.
+async function findTask(launcherOnly = false) {
+//  Result of that command should return 2 pid's if launcherOnly is false
+//  Create an array of all returned pid's and kill them all
   return new Promise(function(resolve, reject) {
     var query;
-    //  This current design only allows one Rust server per Windows server login
-    if (target == 'RustDedicated.exe') {
-      query = "commandline LIKE '%RustDedicated.exe%'";
+
+    // This query allows for more than one server running for windows host
+    if (launcherOnly) {
+      query = "commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%'";
     } else {
-      query = "commandline LIKE '%cmd%' AND commandline LIKE '%" + target + "%'";
+      query = "(commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%') OR executablepath LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "\\\\" + rusty.launchexec.replace(/\\/g, '\\\\') + "%'";
     }
 
-    cp.exec(`wmic process where "` + query + `" get ProcessId | MORE +1`,
+    cp.exec(`wmic process where "` + query + `" get ProcessId 2>nul | MORE +1`,
       function(error, data) {
         newarray = '';
         if (data) {
-          var oldarray = data.trim().split("\r\n");
-          var newarray = oldarray.map(function(e) {
+          var newarray = data.trim().split("\r\n").map(function(e) {
             e = e.trim();
             return e;
-          });
+          }).filter(e =>  e);
         }
         resolve(newarray);
       }
@@ -553,39 +552,38 @@ async function findTask(target) {
   });
 }
 
-async function checkTask(target) {
-//  When there are 3 or more running tasks, then the single task we're looking
-//  for is running (other pids are artifacts from query itself).
-  var res = await findTask(target);
-  if (res.length >= 3) {
+async function checkTask() {
+  var res = await findTask(true);
+  if (res.length >= 1 ) {
     return true;
   }
   return false;
 }
 
-async function endTask(target) {
+async function endTask() {
 //  Kill each task associated with a pid, probably
 //  some of these will no longer exist beforehand.
   return new Promise(async function(resolve, reject) {
-    var pidList = await findTask(target);
-    pidList.forEach(function(item) {
-      cp.exec(`taskkill /t /f /pid ${item}`,
-        function(error, data) {
+    var pidList = await findTask();
+    if (pidList.length > 1) {
+      pidList.forEach(function(item) {
+        cp.exec(`taskkill /t /f /pid ${item}`,
+          function(error, data) {
+        });
       });
-    });
+    }
     resolve();
   });
 }
 
 async function startRust() {
+  await endTask();
   await cp.exec(`start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`,
     function(error, data) {
   });
 }
 
 async function restartServer() {
-  await endTask("RustDedicated.exe");
-  await endTask(rusty.launchfile);
   await startRust();
 }
 
@@ -634,7 +632,7 @@ function getRandomInt(min, max) {
 
 async function newSeed(seed, salt) {
 //  Save the new seed and salt in the launch file batch file.
-  var data     = await readFile(rusty.launchdir + rusty.launchfile);
+  var data     = await readFile(rusty.launchdir + "\\" + rusty.launchfile);
   var oldarray = data.trim().split("\r\n");
 
   oldarray.forEach(function(item, index) {
@@ -648,8 +646,8 @@ async function newSeed(seed, salt) {
     }
   });
   //  Write the new commnand line out to the batch file
-  fs.truncate(rusty.launchdir + rusty.launchfile, 0, function() {
-      fs.writeFileSync(rusty.launchdir + rusty.launchfile, oldarray.join("\r\n"), function (err) {
+  fs.truncate(rusty.launchdir + "\\" + rusty.launchfile, 0, function() {
+      fs.writeFileSync(rusty.launchdir + "\\" + rusty.launchfile, oldarray.join("\r\n"), function (err) {
           if (err) {
               return console.log("Error writing file: " + err);
           }
