@@ -169,7 +169,7 @@ rusty.config    = program.config ? program.config : defaults.config;
       } else {
         unavail++;
         //  If the Rust server is not actually running, start it
-        if ((!(await checkTask(rusty.launchfile))) && (rusty.autostart)) {
+        if ((!(await checkTask())) && (rusty.autostart)) {
           console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
           await restartServer();
@@ -532,9 +532,9 @@ async function findTask(launcherOnly = false) {
 
     // This query allows for more than one server running for windows host
     if (launcherOnly) {
-      query = "commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%'";
+      query = "caption LIKE '%cmd.exe%' AND commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%'";
     } else {
-      query = "(commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%') OR executablepath LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "\\\\" + rusty.launchexec.replace(/\\/g, '\\\\') + "%'";
+      query = "(caption LIKE '%cmd.exe%' AND commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%') OR executablepath LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "\\\\" + rusty.launchexec.replace(/\\/g, '\\\\') + "%'";
     }
 
     cp.exec(`wmic process where "` + query + `" get ProcessId 2>nul | MORE +1`,
