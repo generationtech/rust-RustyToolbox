@@ -302,7 +302,7 @@ async function checkManifest(file) {
         var data      = await readFile(file);
         let manifest  = vdf.parse(data);
         if (manifest) {
-          rusty.branch  = manifest['AppState']['UserConfig']['betakey'] ? manifest['AppState']['UserConfig']['betakey'] : "public";
+          rusty.branch  = manifest['AppState']['UserConfig']['BetaKey'] ? manifest['AppState']['UserConfig']['BetaKey'] : "public";
           rusty.buildid = manifest['AppState']['buildid']               ? manifest['AppState']['buildid']               : rusty.buildid;
           rusty.manifestDate = stats.mtime;
         }
