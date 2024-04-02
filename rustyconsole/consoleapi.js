@@ -1,53 +1,32 @@
-const webSocket = require('ws');
-const util      = require('util');
+const WebSocket = require('ws');
 
 module.exports.sendCommand = function(rconService) {
-  return new Promise(function(resolve, reject) {
-    rconService.Disconnect = function() {
-      if (rconService.socket) {
-        rconService.socket.close();
-        rconService.socket = null;
-      }
-    }
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(`ws://${rconService.server}/${rconService.password}`);
 
-    rconService.SendMessage = function(msg, identifier) {
-      if (rconService.socket === null || !rconService.socket.readyState === 1)
-        return;
+    socket.on('message', (data) => {
+      rconService.disconnect();
+      const response = rconService.json ? data : JSON.parse(data).Message;
+      resolve({ result: response, error: null });
+    });
 
-      if (identifier === null)
-        identifier = -1;
-
-      var packet = {
-        Identifier: identifier,
-        Message:    msg,
-        Name:       "WebRcon"
+    socket.on('open', () => {
+      const packet = {
+        Identifier: rconService.id || -1,
+        Message: rconService.command,
+        Name: "WebRcon",
       };
+      socket.send(JSON.stringify(packet));
+    });
 
-      rconService.socket.send(JSON.stringify(packet));
+    socket.on('error', (e) => {
+      console.error(e.message); // Log error message
+      rconService.disconnect();
+      reject(new Error(e.message));
+    });
+
+    rconService.disconnect = () => {
+      if (socket) socket.close();
     };
-
-    rconService.socket = new webSocket("ws://" + rconService.server + "/" + rconService.password);
-
-    rconService.socket.onmessage = function(e) {
-      let retval = null;
-      if (!rconService.quiet) {
-        if (rconService.json) {
-          retval = e.data;
-        } else {
-          retval = JSON.parse(e.data).Message;
-        }
-      }
-      rconService.Disconnect();
-      resolve({ 'result': retval, 'error': null });
-    }
-
-    rconService.socket.onopen = function() {
-      rconService.SendMessage(rconService.command, rconService.id);
-    }
-
-    rconService.socket.onerror  = function(e) {
-      if (!rconService.quiet) console.log(e.message);
-      resolve({ 'result': null, 'error': true });
-    }
-  })
-}
+  });
+};
