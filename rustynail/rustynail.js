@@ -296,22 +296,24 @@ async function checkManifest(file) {
 //  the server was updated or re-installed outside of script control
 //  while script was running.
   try {
-    var stats = fs.statSync(file)
-    if (stats.mtime.getTime() != rusty.manifestDate.getTime()) {
+    const stats = await fs.promises.stat(file);
+    if (!rusty.manifestDate || stats.mtime.getTime() !== rusty.manifestDate.getTime()) {
       try {
-        var data      = await readFile(file);
-        let manifest  = vdf.parse(data);
-        if (manifest) {
-          rusty.branch  = manifest['AppState']['UserConfig']['BetaKey'] ? manifest['AppState']['UserConfig']['BetaKey'] : "public";
-          rusty.buildid = manifest['AppState']['buildid']               ? manifest['AppState']['buildid']               : rusty.buildid;
+        const data = await fs.promises.readFile(file, 'utf8');
+        const manifest = vdf.parse(data);
+        if (manifest && manifest['AppState']) {
+          rusty.branch = manifest['AppState']['UserConfig'] && manifest['AppState']['UserConfig']['betakey']
+            ? manifest['AppState']['UserConfig']['betakey']
+            : "public";
+          rusty.buildid = manifest['AppState']['buildid'] || rusty.buildid;
           rusty.manifestDate = stats.mtime;
         }
       } catch(e) {
-        console.log(e)
+        console.log("Error parsing manifest:", e);
       }
     }
   } catch(e) {
-    console.log(e)
+    console.log("Error accessing manifest file:", e);
   }
 }
 

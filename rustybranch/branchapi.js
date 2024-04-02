@@ -8,22 +8,15 @@ module.exports.getBuildID = function(appID, branch) {
     cp.exec('del steam\\appcache\\appinfo.vdf',
       function(error, data) {
     });
-    //  steamcmd has problem with stdout and redirection in general where output is truncated.
-    //  Must run app_info_print twice to get full output from full run, then must remove the
-    //  the extra half at the end ourselves (linux steamcmd don't do this :) )
-    cp.exec('steam\\steamcmd +login anonymous +app_info_print "' + appID + '" +app_info_print "' + appID + '" +quit',
+  cp.exec('steam\\steamcmd +login anonymous +app_info_update +app_info_print "' + appID + '" +logoff +quit',
       function(error, data) {
-        //  cut the junk from front of return data
-        var dStart = data.search('"' + appID + '"');
-        //  cut the extra 0.5 result from data
-        data = data.substring(dStart, data.lastIndexOf('AppID : ' + appID));
-        //  convert Valve Value Data Format to JS object
-        data = vdf.parse(data);
-        try {
-          buildid = data[appID]['depots']['branches'][branch]['buildid'];
-        } catch(e) {
-          buildid = null;
-        }
+        const startPattern = `"${appID}"`;
+        const endPattern = `steamcmd has been disconnected`;
+        const startIndex = data.indexOf(startPattern);
+        const endIndex = data.lastIndexOf(endPattern);
+        const vdfContent = data.substring(startIndex, endIndex);
+        appInfo = vdf.parse(vdfContent);
+        buildid = appInfo[appID]?.depots?.branches?.[branch]?.buildid;
         resolve(buildid);
     });
   })
