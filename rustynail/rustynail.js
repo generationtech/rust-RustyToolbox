@@ -14,7 +14,6 @@ const stream = require('stream');
 const vdf = require('vdf');
 const program = require('commander');
 const nodemailer = require('nodemailer');
-const cp = require("child_process");
 const branchapi = require('../rustybranch/branchapi');
 const consoleapi = require('../rustyconsole/consoleapi');
 const { exit } = require('process');
@@ -50,6 +49,8 @@ const defaults = {
   autoupdate: true,
   timer: 60000,
   timeout: 2000,
+  unavail: 10,
+  failsafe: 5,
   announce: 'Update released by Facepunch, server rebooting to update',
   ticks: 5,
 };
@@ -118,21 +119,47 @@ program
   .option('-v, --empass <password>', 'email user password')
   .option('-w, --emupdate', 'enable sending email for updates')
   .option('-x, --emunavail', 'enable sending email for unavailability')
-  .option('-f, --forcecfg', 'config file overrides command-line options')
-  .parse(process.argv);
+  .option('--forcecfg', 'config file overrides command-line options');   // no short flag: -f is --failsafe
 
-// Assign command-line options to `rusty` object
-Object.assign(rusty, program.opts());
+// Indirection so tests can replace sleeps without waiting in real time.
+const sys = {
+  sleep: (ms) => new Promise((resolve, reject) => setTimeout(() => resolve(), ms)),
+};
+
+// Parse command-line options and assign them to the `rusty` object
+function applyCliOptions(argv) {
+  program.parse(argv);
+  //  Copy only options that have a value, so an omitted -c keeps the default config path
+  for (const [key, value] of Object.entries(program.opts())) {
+    if (value !== undefined) rusty[key] = value;
+  }
+}
+
+// State carried between main loop iterations
+function newLoopState() {
+  return {
+    steamBuildid: null,
+    announceTick: 0,
+    unavail: 0,
+  };
+}
 
 //
 //  MAIN LOOP
 //
-(async ()=> {
-  var steamBuildid = null;
-  var announceTick = 0;
-  var unavail      = 0;
+async function main() {
+  const loop = newLoopState();
 
   while (rusty.operation != states.STOP) {
+    await tick(loop);
+    //  Main loop cycle ends
+    await sys.sleep(rusty.timer);   //  Snooze the process a bit
+  }
+  process.exit(0);
+}
+
+//  One iteration of the main loop
+async function tick(loop) {
 
     //  Check if we need to read config values from file
     await checkConfig(rusty.config);
@@ -140,11 +167,11 @@ Object.assign(rusty, program.opts());
     //  NORMAL RUNNING MODE, check for updates and unavailability
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {                //  Is online?
-        if (unavail >= rusty.unavail) {         //  Was server offline before?
+        if (loop.unavail >= rusty.unavail) {    //  Was server offline before?
           console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server back online after being unresponsive");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "back online after being unresponsive", rusty.eminstance + "back online after being unresponsive");
         }
-        unavail = 0;
+        loop.unavail = 0;
         try {
           await checkManifest(rusty.manifest);  //  Update buildid & branch from Rust server
         } catch(e) {
@@ -153,33 +180,33 @@ Object.assign(rusty, program.opts());
         try {
           if (rusty.branch) {                   //  Get the current distribution Rust server buildid from Steam
             let retval = await branchapi.getBuildID(defaults.appID, rusty.branch);
-            if (retval) steamBuildid = retval;
+            if (retval) loop.steamBuildid = retval;
           }
         } catch(e) {
           console.log(e)
         }
-        console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Server: ${rusty.buildid} Steam: ${steamBuildid}`);
+        console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Server: ${rusty.buildid} Steam: ${loop.steamBuildid}`);
       } else {
-        unavail++;
+        loop.unavail++;
         //  If the Rust server is not actually running, start it
         if ((!(await checkTask())) && (rusty.autostart)) {
           console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
           await restartServer();
-          unavail = 0;
+          loop.unavail = 0;
           //  Snooze the process a bit
-          await new Promise((resolve, reject) => setTimeout(() => resolve(), 10000));
+          await sys.sleep(10000);
         } else {
           //  Is Rust server permanently unavailable?
-          if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
+          if ((loop.unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
-            unavail = 0;
+            loop.unavail = 0;
           } else {
             //  Rust server is temporarily unavailable
-            console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
-            if (unavail == rusty.unavail) {
+            console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server not responding (" + loop.unavail + " attempt" + (loop.unavail == 1 ? "" : "s") + ")");
+            if (loop.unavail == rusty.unavail) {
               if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
             }
           }
@@ -187,26 +214,26 @@ Object.assign(rusty, program.opts());
       }
     }
 
-    //  MONITOR FOR UPDATES
-    if ((rusty.buildid != steamBuildid) && (rusty.autoupdate)) {
+    //  MONITOR FOR UPDATES (only when both buildids are known; a failed lookup is not an update)
+    if (rusty.buildid && loop.steamBuildid && (rusty.buildid != loop.steamBuildid) && (rusty.autoupdate)) {
       //  New update ready from Facepunch
 
       //  IN-GAME ANNOUNCEMENTS
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
         //  Send Rust in-game messages to those players online
-        if (announceTick < rusty.ticks  && rusty.announce) {
+        if (loop.announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
-          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
-          rusty.rcon.command = 'say "Build_ID ' + steamBuildid + ' - '  + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - announceTick) + ' seconds)"';
+          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid ` + rusty.buildid + ` differs ` + loop.steamBuildid + `, announcing update`);
+          rusty.rcon.command = 'say "Build_ID ' + loop.steamBuildid + ' - '  + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - loop.announceTick) + ' seconds)"';
           try {
             let retval = await consoleapi.sendCommand(rusty.rcon);
           } catch(e) {
             console.log('console command returned error: ' + e)
           }
-          announceTick++;
+          loop.announceTick++;
         } else {
           //  Trigger actual server update process
-          announceTick = 0;
+          loop.announceTick = 0;
           rusty.operation = states.UPGRADE;
         }
       }
@@ -214,25 +241,26 @@ Object.assign(rusty, program.opts());
       // SIGNAL UPDATE TO SERVER
       if (rusty.operation == states.UPGRADE) {
         console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid differs, updating server`);
-//        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid " + steamBuildid);
+//        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + loop.steamBuildid, rusty.eminstance + "rebooting for update to buildid " + loop.steamBuildid);
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
-          unavail = 0;
+          loop.unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
-          //  Get new seed 1st update-caused reboot of every 1st Thursday of the month
-          if (isFirstThursday()) {
-            checkSeed();
-          }
         } catch(e) {
+          //  The server may drop the connection as it quits, without replying
           console.log('console command returned error: ' + e)
+        }
+        //  Get new seed 1st update-caused reboot of every 1st Thursday of the month
+        if (isFirstThursday()) {
+          checkSeed();
         }
       }
 
       //  MONITOR FOR SERVER REBOOT
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {                //  Is online?
-          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update to buildid " + steamBuildid);
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + loop.steamBuildid, rusty.eminstance + "back online after update to buildid " + loop.steamBuildid);
           console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ':  Server back online after update');
           rusty.manifestDate = new Date();
           try {
@@ -241,25 +269,21 @@ Object.assign(rusty, program.opts());
             console.log(e)
           }
           rusty.operation = states.RUNNING;
-          unavail = 0;
+          loop.unavail = 0;
         } else {
-          unavail++;
+          loop.unavail++;
           //  Is Rust server permanently unavailable?
-          if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
+          if ((loop.unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
-            unavail = 0;
+            loop.unavail = 0;
           }
         }
       }
       //  End server update process
     }
-    //  Main loop cycle ends
-    await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));   //  Snooze the process a bit
-  }
-  process.exit(0);
-})();
+}
 //
 //  END MAIN LOOP
 //
@@ -306,10 +330,18 @@ async function checkConfig(file) {
 //  Loads all the script configuration values from either
 //  command-line options, configuration file, or program defaults.
 //  Check config file date/time and reload if the file is updated.
-  var stats = fs.statSync(file)
-  if (stats.mtime.getTime() != rusty.configDate.getTime()) {
+//  The config file is optional: without one, command-line options and defaults are used.
+  var stats = null;
+  try {
+    stats = fs.statSync(file);
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  var mtime = stats ? stats.mtime : new Date(0);
+  if (mtime.getTime() != rusty.configDate.getTime()) {
     try {
-      var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!stats) console.log(`Config file ${file} not found, using command-line options and defaults`);
+      var jsonConfig = stats ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 
       //  Handle standard (easy) config options
       setConfig(jsonConfig, rusty, "manifest");
@@ -338,7 +370,7 @@ async function checkConfig(file) {
 
       rusty.instance   = await getInstance();
       rusty.eminstance = rusty.instance ? rusty.instance + ": " : "Server ";
-      rusty.configDate = stats.mtime;
+      rusty.configDate = mtime;
 
       printConfig();
 
@@ -349,22 +381,34 @@ async function checkConfig(file) {
 }
 
 // Chatgpt could not refactor this into functional code. FAIL
+const booleanKeys = ['autostart', 'autofail', 'autoupdate', 'emupdate', 'emunavail'];
+
 function setConfig(jsonConfig, rustyVar, configKey) {
 //  Decision tree to set a sigle config value from
 //  either command-line, config file, or defaults,
 //  otherwise set to null for novel vars.
+//  "Set" means present, so false, 0 and '' are kept rather than skipped.
+  let value;
   if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
-    rustyVar[configKey] = jsonConfig[configKey];
-  } else if (program[configKey]) {
-    rustyVar[configKey] = program[configKey];
-  } else if (defaults[configKey]) {
-    rustyVar[configKey] = defaults[configKey];
+    value = jsonConfig[configKey];
+  } else if (program[configKey] !== undefined) {
+    value = program[configKey];
+  } else if (defaults[configKey] !== undefined) {
+    value = defaults[configKey];
   } else {
-    rustyVar[configKey] = null;
+    value = null;
   }
+  //  The documented config example uses "true"/"false" strings for on/off options
+  if (booleanKeys.includes(configKey) && typeof value === 'string') {
+    if (value.trim().toLowerCase() === 'false') value = false;
+    else if (value.trim().toLowerCase() === 'true') value = true;
+  }
+  rustyVar[configKey] = value;
 }
 //
 //
+
+const secretKeys = ['password', 'empass'];
 
 function printConfig() {
   console.log(); // Print an empty line for spacing
@@ -376,6 +420,8 @@ function printConfig() {
           if (typeof obj[key] === 'object' && obj[key] !== null) {
               // Recursive call for nested objects
               printProperties(obj[key], `${prefix}${key}.`);
+          } else if (secretKeys.includes(key) && obj[key]) {
+              console.log(`${prefix}${key}: ********`);   // never log passwords
           } else {
               console.log(`${prefix}${key}: ${obj[key]}`);
           }
@@ -470,69 +516,126 @@ async function getInstance() {
     const data = await fsp.readFile(filePath, 'utf8');
 
     // Use a regular expression to extract the instance name directly.
-    const match = data.match(/server\.hostname\s+"([^"]+)"/i);
-    return match ? match[1].trim() : null;
+    // The hostname may be quoted (+server.hostname "My Server") or a single word (+server.hostname MyServer).
+    const match = data.match(/server\.hostname\s+(?:"([^"]+)"|([^\s"]+))/i);
+    return match ? (match[1] ?? match[2]).trim() : null;
   } catch (error) {
     console.error(`Error retrieving instance name: ${error}`);
     return null; // Return null in case of any error.
   }
 }
 
+//  This server is one of several on a shared Windows host, and endTask force-kills whole process
+//  trees. The launch settings feed the process search, so they must identify this one server.
+//  Returns a description of the problem, or null when the settings are usable.
+function launchConfigProblem() {
+  const values = { launchdir: rusty.launchdir, launchfile: rusty.launchfile, launchexec: rusty.launchexec };
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value !== 'string' || value.trim() === '') return `${name} is not set`;
+    if (/['"%\[\]]/.test(value)) return `${name} contains a quote, % or [ ] character`;
+    if (/rustadminrelease/i.test(value)) return `${name} points into a RustAdminRelease directory`;
+  }
+  if (!path.win32.isAbsolute(rusty.launchdir)) return `launchdir must be a full path (${rusty.launchdir})`;
+  if (rusty.launchdir.split(/[\\/]+/).filter(Boolean).length < 2) return `launchdir is a drive root (${rusty.launchdir})`;
+  if (/[\\/]/.test(rusty.launchfile)) return 'launchfile must be a file name without a folder';
+  if (!/\.(bat|cmd)$/i.test(rusty.launchfile)) return 'launchfile must be a .bat or .cmd file';
+  if (!/\.exe$/i.test(rusty.launchexec)) return 'launchexec must be an .exe file';
+  if (!fs.existsSync(path.join(rusty.launchdir, rusty.launchfile))) return `launchfile ${rusty.launchfile} was not found in launchdir ${rusty.launchdir}`;
+  return null;
+}
+
+//  Lists the PIDs of this Rust server's launcher cmd.exe (and, unless launcherOnly, its RustDedicated.exe).
+//  Returns null when that can't be determined; callers must not read null as "not running".
 async function findTask(launcherOnly = false) {
-  // Composes a query to find processes related to the Rust server based on the launcher or the Rust executable.
-  let query = launcherOnly
-    ? `caption LIKE '%cmd.exe%' AND commandline LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}%' AND commandline LIKE '%${rusty.launchfile}%'`
-    : `(caption LIKE '%cmd.exe%' AND commandline LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}%' AND commandline LIKE '%${rusty.launchfile}%') OR executablepath LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}\\\\${rusty.launchexec.replace(/\\/g, '\\\\')}%'`;
+  const problem = launchConfigProblem();
+  if (problem) {
+    console.error(`Not looking for Rust server processes: ${problem}`);
+    return null;
+  }
+
+  const wql = (s) => s.replace(/\\/g, '\\\\');                       //  WQL strings escape backslashes
+  const dir = wql(rusty.launchdir.replace(/[\\/]+$/, ''));
+  const file = wql(rusty.launchfile);
+  //  cmd.exe running the batch file, as started by startRust (cd <dir> && <file>) or by its full path,
+  //  but never the cmd.exe that runs this wmic query
+  const launcher = `(caption = 'cmd.exe' AND NOT commandline LIKE '%wmic%' AND (commandline LIKE '%cd ${dir} && ${file}%' OR commandline LIKE '%${dir}\\\\${file}%'))`;
+  const query = launcherOnly ? launcher : `${launcher} OR executablepath = '${dir}\\\\${wql(rusty.launchexec)}'`;
 
   try {
-    const { stdout } = await cpExec(`wmic process where "${query}" get ProcessId 2>nul | MORE +1`);
-    const processIds = stdout
-      .trim()
-      .split("\r\n")
+    //  Called directly (no "2>nul | MORE +1"), so a failed query rejects instead of looking like "no processes"
+    const { stdout } = await cpExec(`wmic process where "${query}" get ProcessId`);
+    return stdout
+      .split(/\r?\n/)
       .map(line => line.trim())
-      .filter(line => line);
-
-    return processIds;
+      .filter(line => /^\d+$/.test(line));
   } catch (error) {
     console.error(`Error finding tasks: ${error}`);
-    return []; // Return an empty array to indicate no processes found or in case of an error.
+    return null;
   }
 }
 
 async function checkTask() {
   // This function checks if there is at least one task related to the Rust server launcher.
   const processIds = await findTask(true);
+  if (processIds === null) {
+    //  Unknown: report "running" so a second copy of the server is never started
+    console.error('Could not check whether the Rust server is running; assuming it is');
+    return true;
+  }
   return processIds.length >= 1;
 }
 
+//  Kills this Rust server's processes. Returns true only when none are left afterwards.
 async function endTask() {
-  // Kills each task associated with a PID from the list obtained by findTask.
   const pidList = await findTask();
+  if (pidList === null) return false;
+  if (pidList.length === 0) return true;
+
   for (const item of pidList) {
+    const pid = Number(item);
+    if (!Number.isInteger(pid) || pid <= 4 || pid === process.pid || pid === process.ppid) {
+      console.error(`Not killing process ${item}: it is RustyNail itself, its console, or a system process`);
+      continue;
+    }
     try {
-      await cp.promises.exec(`taskkill /t /f /pid ${item}`);
+      await cpExec(`taskkill /t /f /pid ${pid}`);
     } catch (error) {
-      console.error(`Error killing process ${item}:`, error);
+      //  Usually the process already exited as part of an earlier tree kill
+      console.error(`Error killing process ${pid}:`, error.message);
     }
   }
+
+  await sys.sleep(2000);                                            //  Give Windows a moment to tear down
+  const remaining = await findTask();
+  if (remaining === null || remaining.length > 0) {
+    console.error(`Rust server processes still running after kill: ${remaining === null ? 'unknown' : remaining.join(', ')}`);
+    return false;
+  }
+  return true;
 }
 
+//  Returns true if the server was launched.
 async function startRust() {
-  await endTask();
+  if (!(await endTask())) {
+    console.error('Not starting Rust: could not confirm that the old server processes are stopped');
+    return false;
+  }
   try {
     const { stdout, stderr } = await cpExec(`start cmd /c "cd ${rusty.launchdir} && ${rusty.launchfile}"`);
     if (stdout) console.log(stdout);
     if (stderr) console.error(stderr);
+    return true;
   } catch (error) {
     console.error('Failed to start Rust:', error);
+    return false;
   }
 }
 
 async function restartServer() {
   console.log('Restarting Rust server...');
   try {
-    await startRust();
-    console.log('Rust server restarted successfully.');
+    const started = await startRust();
+    console.log(started ? 'Rust server restarted successfully.' : 'Rust server was NOT restarted.');
   } catch (error) {
     console.error('Failed to restart Rust server:', error);
   }
@@ -551,8 +654,12 @@ async function checkSeed() {
   const today = new Date();
   const beginningOfDay = new Date(today.setHours(0, 0, 0, 0));
 
+  // seedDate may be a Date, an ISO string (as saved since 2024) or a number (as saved before),
+  // depending on where it came from; compare it as a Date. An unreadable date counts as "never".
+  const seedDate = new Date(rusty.seedDate);
+
   // Check if it's time to update the seed
-  if (rusty.seedDate.valueOf() === -2208970800000 || rusty.seedDate < beginningOfDay) {
+  if (isNaN(seedDate) || seedDate.valueOf() === -2208970800000 || seedDate < beginningOfDay) {
     console.log(new Date().toLocaleString('en-US', datetimeOptions) + ": Update on 1st Thursday, changing to new seed and salt");
 
     const nextSeed = getRandomInt(0, 2147483647);
@@ -633,4 +740,20 @@ async function readWriteConfig(seedDate) {
   } catch (err) {
     console.error('Error updating configuration:', err);
   }
+}
+
+// Exported for tests. The main loop only runs when this file is executed directly.
+module.exports = {
+  states, defaults, rusty, program, sys,
+  applyCliOptions, newLoopState, main, tick,
+  checkConfig, setConfig, printConfig, checkManifest,
+  checkStatus, status, getInstance,
+  launchConfigProblem, findTask, checkTask, endTask, startRust, restartServer,
+  isFirstThursday, checkSeed, getRandomInt, newSeed, replaceEntry, readWriteConfig,
+  sendEmails,
+};
+
+if (require.main === module) {
+  applyCliOptions(process.argv);
+  main();
 }

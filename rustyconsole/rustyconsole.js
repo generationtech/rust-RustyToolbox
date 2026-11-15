@@ -31,6 +31,14 @@ program
   })
   .parse(process.argv);
 
+// Copy the given options into the RCON request
+const opts = program.opts();
+if (opts.server !== undefined) rcon.server = opts.server;
+if (opts.password !== undefined) rcon.password = opts.password;
+if (opts.id !== undefined) rcon.id = Number(opts.id);
+if (opts.json !== undefined) rcon.json = opts.json;
+if (opts.quiet !== undefined) rcon.quiet = opts.quiet;
+
 if (!rcon.command) {
   console.error('No command entered for remote server.');
   program.outputHelp();
