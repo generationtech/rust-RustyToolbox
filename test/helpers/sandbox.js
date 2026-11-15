@@ -115,9 +115,13 @@ const sandbox = {
   allowPort(port) { allowedPorts.add(Number(port)); },
   disallowPort(port) { allowedPorts.delete(Number(port)); },
   // Run `node <args>` (the only real child process tests may start).
+  // Colour is always off: in an interactive console the test runner sets FORCE_COLOR, and the
+  // child would then wrap its output in colour codes that break exact-output checks.
   runNode(args, options = {}) {
+    const env = { ...(options.env ?? process.env), NO_COLOR: '1' };
+    delete env.FORCE_COLOR;
     return new Promise((resolve) => {
-      original.execFile(process.execPath, args, { timeout: 15000, ...options }, (error, stdout, stderr) => {
+      original.execFile(process.execPath, args, { timeout: 15000, ...options, env }, (error, stdout, stderr) => {
         resolve({ code: error ? (error.code ?? 1) : 0, stdout, stderr });
       });
     });
