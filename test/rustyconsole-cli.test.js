@@ -33,22 +33,22 @@ test('with no command it prints an error and exits 1 without connecting', async 
   assert.strictEqual(r.ws.url, null);
 });
 
-knownBug('#3', '-s and -p choose the server and password', async () => {
+test('#3: -s and -p choose the server and password', async () => {
   const r = await runConsole(['-s', '10.0.0.5:28099', '-p', 'secretpw', 'version']);
   assert.strictEqual(r.ws.url, 'ws://10.0.0.5:28099/secretpw');
 });
 
-knownBug('#3', '-i sets the message Identifier', async () => {
+test('#3: -i sets the message Identifier', async () => {
   const r = await runConsole(['-i', '7', 'version']);
   assert.strictEqual(r.ws.sent.Identifier, 7);
 });
 
-knownBug('#3', '-q suppresses output', async () => {
+test('#3: -q suppresses output', async () => {
   const r = await runConsole(['-q', 'version']);
   assert.strictEqual(r.stdout.trim(), '');
 });
 
-knownBug('#3', '--json prints the whole reply as JSON', async () => {
+test('#3: --json prints the whole reply as JSON', async () => {
   const r = await runConsole(['--json', 'version']);
   let parsed;
   assert.doesNotThrow(() => { parsed = JSON.parse(r.stdout.trim()); }, 'stdout should be JSON');
