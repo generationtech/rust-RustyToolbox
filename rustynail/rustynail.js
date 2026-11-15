@@ -118,21 +118,44 @@ program
   .option('-v, --empass <password>', 'email user password')
   .option('-w, --emupdate', 'enable sending email for updates')
   .option('-x, --emunavail', 'enable sending email for unavailability')
-  .option('-f, --forcecfg', 'config file overrides command-line options')
-  .parse(process.argv);
+  .option('-f, --forcecfg', 'config file overrides command-line options');
 
-// Assign command-line options to `rusty` object
-Object.assign(rusty, program.opts());
+// Indirection so tests can replace sleeps without waiting in real time.
+const sys = {
+  sleep: (ms) => new Promise((resolve, reject) => setTimeout(() => resolve(), ms)),
+};
+
+// Parse command-line options and assign them to the `rusty` object
+function applyCliOptions(argv) {
+  program.parse(argv);
+  Object.assign(rusty, program.opts());
+}
+
+// State carried between main loop iterations
+function newLoopState() {
+  return {
+    steamBuildid: null,
+    announceTick: 0,
+    unavail: 0,
+  };
+}
 
 //
 //  MAIN LOOP
 //
-(async ()=> {
-  var steamBuildid = null;
-  var announceTick = 0;
-  var unavail      = 0;
+async function main() {
+  const loop = newLoopState();
 
   while (rusty.operation != states.STOP) {
+    await tick(loop);
+    //  Main loop cycle ends
+    await sys.sleep(rusty.timer);   //  Snooze the process a bit
+  }
+  process.exit(0);
+}
+
+//  One iteration of the main loop
+async function tick(loop) {
 
     //  Check if we need to read config values from file
     await checkConfig(rusty.config);
@@ -140,11 +163,11 @@ Object.assign(rusty, program.opts());
     //  NORMAL RUNNING MODE, check for updates and unavailability
     if (rusty.operation == states.RUNNING) {
       if (await checkStatus()) {                //  Is online?
-        if (unavail >= rusty.unavail) {         //  Was server offline before?
+        if (loop.unavail >= rusty.unavail) {    //  Was server offline before?
           console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server back online after being unresponsive");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "back online after being unresponsive", rusty.eminstance + "back online after being unresponsive");
         }
-        unavail = 0;
+        loop.unavail = 0;
         try {
           await checkManifest(rusty.manifest);  //  Update buildid & branch from Rust server
         } catch(e) {
@@ -153,33 +176,33 @@ Object.assign(rusty, program.opts());
         try {
           if (rusty.branch) {                   //  Get the current distribution Rust server buildid from Steam
             let retval = await branchapi.getBuildID(defaults.appID, rusty.branch);
-            if (retval) steamBuildid = retval;
+            if (retval) loop.steamBuildid = retval;
           }
         } catch(e) {
           console.log(e)
         }
-        console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Server: ${rusty.buildid} Steam: ${steamBuildid}`);
+        console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Server: ${rusty.buildid} Steam: ${loop.steamBuildid}`);
       } else {
-        unavail++;
+        loop.unavail++;
         //  If the Rust server is not actually running, start it
         if ((!(await checkTask())) && (rusty.autostart)) {
           console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server was not running, starting now");
           if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not running, starting now", rusty.eminstance + "not running, starting now");
           await restartServer();
-          unavail = 0;
+          loop.unavail = 0;
           //  Snooze the process a bit
-          await new Promise((resolve, reject) => setTimeout(() => resolve(), 10000));
+          await sys.sleep(10000);
         } else {
           //  Is Rust server permanently unavailable?
-          if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
+          if ((loop.unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
-            unavail = 0;
+            loop.unavail = 0;
           } else {
             //  Rust server is temporarily unavailable
-            console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server not responding (" + unavail + " attempt" + (unavail == 1 ? "" : "s") + ")");
-            if (unavail == rusty.unavail) {
+            console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server not responding (" + loop.unavail + " attempt" + (loop.unavail == 1 ? "" : "s") + ")");
+            if (loop.unavail == rusty.unavail) {
               if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "not responding", rusty.eminstance + "not responding");
             }
           }
@@ -188,25 +211,25 @@ Object.assign(rusty, program.opts());
     }
 
     //  MONITOR FOR UPDATES
-    if ((rusty.buildid != steamBuildid) && (rusty.autoupdate)) {
+    if ((rusty.buildid != loop.steamBuildid) && (rusty.autoupdate)) {
       //  New update ready from Facepunch
 
       //  IN-GAME ANNOUNCEMENTS
       if (rusty.operation == states.RUNNING || rusty.operation == states.ANNOUNCE) {
         //  Send Rust in-game messages to those players online
-        if (announceTick < rusty.ticks  && rusty.announce) {
+        if (loop.announceTick < rusty.ticks  && rusty.announce) {
           rusty.operation = states.ANNOUNCE;
-          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid ` + rusty.buildid + ` differs ` + steamBuildid + `, announcing update`);
-          rusty.rcon.command = 'say "Build_ID ' + steamBuildid + ' - '  + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - announceTick) + ' seconds)"';
+          console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid ` + rusty.buildid + ` differs ` + loop.steamBuildid + `, announcing update`);
+          rusty.rcon.command = 'say "Build_ID ' + loop.steamBuildid + ' - '  + rusty.announce + ' (' + (rusty.timer / 1000) * (rusty.ticks - loop.announceTick) + ' seconds)"';
           try {
             let retval = await consoleapi.sendCommand(rusty.rcon);
           } catch(e) {
             console.log('console command returned error: ' + e)
           }
-          announceTick++;
+          loop.announceTick++;
         } else {
           //  Trigger actual server update process
-          announceTick = 0;
+          loop.announceTick = 0;
           rusty.operation = states.UPGRADE;
         }
       }
@@ -214,11 +237,11 @@ Object.assign(rusty, program.opts());
       // SIGNAL UPDATE TO SERVER
       if (rusty.operation == states.UPGRADE) {
         console.log((new Date()).toLocaleString('en-US', datetimeOptions) + `:  Buildid differs, updating server`);
-//        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + steamBuildid, rusty.eminstance + "rebooting for update to buildid " + steamBuildid);
+//        if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "rebooting for update to buildid " + loop.steamBuildid, rusty.eminstance + "rebooting for update to buildid " + loop.steamBuildid);
         rusty.rcon.command = 'quit';
         try {
           rusty.operation = states.REBOOT;
-          unavail = 0;
+          loop.unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
           //  Get new seed 1st update-caused reboot of every 1st Thursday of the month
           if (isFirstThursday()) {
@@ -232,7 +255,7 @@ Object.assign(rusty, program.opts());
       //  MONITOR FOR SERVER REBOOT
       else if (rusty.operation == states.REBOOT) {
         if (await checkStatus()) {                //  Is online?
-          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + steamBuildid, rusty.eminstance + "back online after update to buildid " + steamBuildid);
+          if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "back online after update to buildid " + loop.steamBuildid, rusty.eminstance + "back online after update to buildid " + loop.steamBuildid);
           console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ':  Server back online after update');
           rusty.manifestDate = new Date();
           try {
@@ -241,25 +264,21 @@ Object.assign(rusty, program.opts());
             console.log(e)
           }
           rusty.operation = states.RUNNING;
-          unavail = 0;
+          loop.unavail = 0;
         } else {
-          unavail++;
+          loop.unavail++;
           //  Is Rust server permanently unavailable?
-          if ((unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
+          if ((loop.unavail >= (rusty.unavail * rusty.failsafe)) && (rusty.autofail)) {
             console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Server fatal unresponsive, killing task");
             if (rusty.emunavail) sendEmails(rusty.emailUnavail, rusty.eminstance + "fatal unresponsive, killing task", rusty.eminstance + "fatal unresponsive, killing task");
             await restartServer();
-            unavail = 0;
+            loop.unavail = 0;
           }
         }
       }
       //  End server update process
     }
-    //  Main loop cycle ends
-    await new Promise((resolve, reject) => setTimeout(() => resolve(), rusty.timer));   //  Snooze the process a bit
-  }
-  process.exit(0);
-})();
+}
 //
 //  END MAIN LOOP
 //
@@ -633,4 +652,20 @@ async function readWriteConfig(seedDate) {
   } catch (err) {
     console.error('Error updating configuration:', err);
   }
+}
+
+// Exported for tests. The main loop only runs when this file is executed directly.
+module.exports = {
+  states, defaults, rusty, program, sys,
+  applyCliOptions, newLoopState, main, tick,
+  checkConfig, setConfig, printConfig, checkManifest,
+  checkStatus, status, getInstance,
+  findTask, checkTask, endTask, startRust, restartServer,
+  isFirstThursday, checkSeed, getRandomInt, newSeed, replaceEntry, readWriteConfig,
+  sendEmails,
+};
+
+if (require.main === module) {
+  applyCliOptions(process.argv);
+  main();
 }
