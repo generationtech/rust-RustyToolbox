@@ -210,8 +210,8 @@ async function tick(loop) {
       }
     }
 
-    //  MONITOR FOR UPDATES
-    if ((rusty.buildid != loop.steamBuildid) && (rusty.autoupdate)) {
+    //  MONITOR FOR UPDATES (only when both buildids are known; a failed lookup is not an update)
+    if (rusty.buildid && loop.steamBuildid && (rusty.buildid != loop.steamBuildid) && (rusty.autoupdate)) {
       //  New update ready from Facepunch
 
       //  IN-GAME ANNOUNCEMENTS

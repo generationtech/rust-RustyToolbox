@@ -164,11 +164,29 @@ test('stuck in REBOOT: restarts after unavail * failsafe misses', async (t) => {
   assert.strictEqual(w.starts(), 1);
 });
 
-knownBug('#2', 'a failed Steam lookup is not treated as an update', async (t) => {
+test('#2: a failed Steam lookup is not treated as an update', async (t) => {
   const w = setUp(t);
   w.steam = new Error('steamcmd failed');
   await w.tick();
+  await w.tick();
+  assert.deepStrictEqual(w.rcon, ['version', 'version']);
+  assert.strictEqual(rusty.operation, states.RUNNING);
+});
+
+test('#2: an unreadable server manifest (no local buildid) is not treated as an update', async (t) => {
+  const w = setUp(t, { config: { manifest: 'Z:\\missing\\appmanifest_258550.acf' } });
+  w.steam = '101';
+  await w.tick();
   assert.deepStrictEqual(w.rcon, ['version']);
+  assert.strictEqual(rusty.operation, states.RUNNING);
+});
+
+test('#2: after a good lookup, a later failed lookup keeps the last known Steam buildid', async (t) => {
+  const w = setUp(t);
+  await w.tick();
+  w.steam = new Error('steamcmd failed');
+  await w.tick();
+  assert.strictEqual(w.loop.steamBuildid, '100');
   assert.strictEqual(rusty.operation, states.RUNNING);
 });
 
