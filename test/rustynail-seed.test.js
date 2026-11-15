@@ -91,10 +91,42 @@ test('checkSeed does nothing when the seed was already changed today', async (t)
   assert.deepStrictEqual(sandbox.execCalls, []);
 });
 
-knownBug('#7', 'checkSeed works when seedDate came from the config file (an ISO string)', async (t) => {
-  // After the first change, readWriteConfig stores seedDate as an ISO string and checkConfig
-  // reloads it as a string; `string < Date` is always false, so the seed never changes again.
+test('#7: checkSeed works when seedDate came from the config file as an ISO string', async (t) => {
+  // readWriteConfig stores seedDate as an ISO string and checkConfig reloads it as a string;
+  // `string < Date` was always false, so the seed changed only once.
   setUpSeed(t, new Date(2026, 10, 5).toISOString());
   await rustynail.checkSeed();
   assert.strictEqual(new Date(srv.readConfig().seedDate).getTime(), new Date(2026, 11, 3).getTime());
+});
+
+test('#7: checkSeed works with the stuck values in the live configs (2024 ISO strings)', async (t) => {
+  for (const stuck of ['2024-05-02T05:00:00.000Z', '2024-06-03T05:00:00.000Z']) {
+    setUpSeed(t, stuck);
+    await rustynail.checkSeed();
+    assert.strictEqual(new Date(srv.readConfig().seedDate).getTime(), new Date(2026, 11, 3).getTime(), stuck);
+    srv.cleanup();
+    t.mock.timers.reset();
+  }
+});
+
+test('#7: checkSeed works with a numeric seedDate (format saved before the 2024 refactor)', async (t) => {
+  setUpSeed(t, new Date(2026, 10, 5).getTime());
+  await rustynail.checkSeed();
+  assert.strictEqual(new Date(srv.readConfig().seedDate).getTime(), new Date(2026, 11, 3).getTime());
+});
+
+test('#7: checkSeed does nothing when the ISO-string seedDate is today', async (t) => {
+  setUpSeed(t, new Date(2026, 11, 3).toISOString());
+  const before = srv.readConfig();
+  await rustynail.checkSeed();
+  assert.deepStrictEqual(srv.readConfig(), before);
+});
+
+test('#7: the seed changes again on the next first Thursday after a reload from the config file', async (t) => {
+  setUpSeed(t, new Date(2026, 10, 5));
+  await rustynail.checkSeed();                                   // Thu 3 Dec 2026
+  rusty.seedDate = srv.readConfig().seedDate;                    // as checkConfig would reload it
+  t.mock.timers.setTime(new Date(2027, 0, 7, 10, 30).getTime()); // Thu 7 Jan 2027
+  await rustynail.checkSeed();
+  assert.strictEqual(new Date(srv.readConfig().seedDate).getTime(), new Date(2027, 0, 7).getTime());
 });

@@ -570,8 +570,12 @@ async function checkSeed() {
   const today = new Date();
   const beginningOfDay = new Date(today.setHours(0, 0, 0, 0));
 
+  // seedDate may be a Date, an ISO string (as saved since 2024) or a number (as saved before),
+  // depending on where it came from; compare it as a Date. An unreadable date counts as "never".
+  const seedDate = new Date(rusty.seedDate);
+
   // Check if it's time to update the seed
-  if (rusty.seedDate.valueOf() === -2208970800000 || rusty.seedDate < beginningOfDay) {
+  if (isNaN(seedDate) || seedDate.valueOf() === -2208970800000 || seedDate < beginningOfDay) {
     console.log(new Date().toLocaleString('en-US', datetimeOptions) + ": Update on 1st Thursday, changing to new seed and salt");
 
     const nextSeed = getRandomInt(0, 2147483647);
