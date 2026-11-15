@@ -239,3 +239,20 @@ test('RCON hang: on a first Thursday the seed still changes when quit gets no re
   // Let the rest of checkSeed (batch file, restart) finish before the fixture is removed.
   await new Promise((r) => setTimeout(r, 100));
 });
+
+test('launch: after RustyNail starts the server, the loop keeps checking until it comes online', async (t) => {
+  const w = setUp(t);
+  w.online = false;
+  w.running = false;
+  await w.tick();                                   // not running: start it
+  assert.strictEqual(w.starts(), 1);
+  w.running = true;                                 // booting: running but not answering yet
+  w.rcon.length = 0;
+  await w.tick();
+  await w.tick();
+  assert.deepStrictEqual(w.rcon, ['version', 'version']);
+  w.online = true;
+  await w.tick();
+  assert.ok(w.logs.some((l) => /Server: 100 Steam: 100/.test(l)), 'periodic version check line');
+  assert.strictEqual(w.starts(), 1);
+});

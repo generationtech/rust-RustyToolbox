@@ -238,3 +238,28 @@ test('hostname: getInstance reads an unquoted +server.hostname', async () => {
   Object.assign(rusty, { launchdir: srv.dir, launchfile: srv.launchfile });
   assert.strictEqual(await rustynail.getInstance(), 'CoolGeeks');
 });
+
+test('launch: the server is started detached from RustyNail output (spawn, stdio ignored), not with exec', async (t) => {
+  // exec waits until every process holding its output pipe exits; the server's cmd.exe inherited that
+  // pipe, so startRust never returned and the main loop stopped after RustyNail started the server.
+  configure();
+  captureConsole(t);
+  fakeSystem([]);
+  assert.strictEqual(await rustynail.startRust(), true);
+  assert.strictEqual(sandbox.spawnOptions.length, 1);
+  const launch = sandbox.spawnOptions[0];
+  assert.strictEqual(launch.command, `start cmd /c "cd ${srv.dir} && start_server.bat"`);
+  assert.strictEqual(launch.shell, true);
+  assert.strictEqual(launch.stdio, 'ignore');
+});
+
+test('launch: a failed start is reported and startRust returns false', async (t) => {
+  configure();
+  const lines = captureConsole(t);
+  sandbox.setExecHandler((cmd) => {
+    if (cmd.startsWith('start ')) throw new Error('start failed');
+    return { stdout: '' };
+  });
+  assert.strictEqual(await rustynail.startRust(), false);
+  assert.ok(lines.some((l) => /Failed to start Rust/.test(l)));
+});
