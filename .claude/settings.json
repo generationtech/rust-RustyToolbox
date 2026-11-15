@@ -79,15 +79,11 @@
       "PowerShell(npm uninstall -g *)"
     ],
     "ask": [
-      "Bash(git push --force*)",
-      "Bash(git push -f*)",
-      "Bash(git push * master*)",
+      "Bash(git push*)",
       "Bash(git merge *)",
       "Bash(git rebase *)",
       "Bash(git reset --hard*)",
-      "PowerShell(git push --force*)",
-      "PowerShell(git push -f*)",
-      "PowerShell(git push * master*)",
+      "PowerShell(git push*)",
       "PowerShell(git merge *)",
       "PowerShell(git rebase *)",
       "PowerShell(git reset --hard*)"
