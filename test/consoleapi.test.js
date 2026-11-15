@@ -70,13 +70,20 @@ test('RCON hang: gives up when the server never replies (rcon.timeout)', async (
 test('RCON hang: without rcon.timeout the default wait is 10 seconds', async (t) => {
   const fake = await startFakeRcon({ silent: true });
   t.after(() => fake.close());
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+  // Stub setTimeout only while sendCommand schedules its timer, then fire that timer by hand.
+  // Don't use t.mock.timers here: it also mocks clearTimeout, so ws can't cancel the real
+  // 30-second close timer of a socket left over from the previous test, and the run stalls.
+  const realSetTimeout = setTimeout;
+  const scheduled = [];
+  const stub = t.mock.method(globalThis, 'setTimeout', (fn, ms) => {
+    scheduled.push({ fn, ms });
+    return realSetTimeout(() => {}, 2 ** 31 - 1);   // real handle for clearTimeout; cleared by finish()
+  });
   const pending = consoleapi.sendCommand(rcon(fake));
-  const outcome = pending.then(() => 'RESOLVED', (e) => e.message);
-  t.mock.timers.tick(9999);
-  await new Promise((r) => setImmediate(r));
-  t.mock.timers.tick(1);
-  assert.strictEqual(await outcome, 'No RCON reply within 10000 ms');
+  stub.mock.restore();
+  assert.deepStrictEqual(scheduled.map((s) => s.ms), [10000]);
+  scheduled[0].fn();
+  await assert.rejects(pending, /No RCON reply within 10000 ms/);
 });
 
 test('#4: a broadcast with another Identifier that arrives first is ignored, also with --json', async (t) => {
