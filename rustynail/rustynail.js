@@ -1,135 +1,127 @@
 #!/usr/bin/env node
 'use strict';
 
-//
-//  RustyNail
-//      Monitor Steam for Rust server updates and notify a Rust server to update itself
-//
-//  (Probably uses too much global variables and such.
-//   Needs a refactoring now that the proof of concept is solid.)
-//
+// RustyNail
+// Monitor Steam for Rust server updates and notify a Rust server to update itself
 
-//  Get external libraries
-var fs         = require('fs');
-var readline   = require('readline');
-var stream     = require('stream');
-var vdf        = require('vdf');
-var program    = require('commander');
-var nodemailer = require('nodemailer');
-var cp         = require("child_process");
+const fs = require('fs');
+const fsp = require('fs').promises;
+const path = require('path');
+const util = require('util');
+const cpExec = util.promisify(require('child_process').exec);
+const readline = require('readline');
+const stream = require('stream');
+const vdf = require('vdf');
+const program = require('commander');
+const nodemailer = require('nodemailer');
+const cp = require("child_process");
+const branchapi = require('../rustybranch/branchapi');
+const consoleapi = require('../rustyconsole/consoleapi');
 
-var branchapi  = require('../rustybranch/branchapi');
-var consoleapi = require('../rustyconsole/consoleapi');
-
-//  Script operational modes used by state machine design
-var states = {
-  STOP:     0,   // Shut down RustyNail and exit
-  BOOT:     1,   // Startup operations
-  RUNNING:  2,   // Normal operation. checking for updates and server availability
-  ANNOUNCE: 3,   // Server upgrade needed, announce to online players
-  UPGRADE:  4,   // Server upgrade needed and announced, ready to reboot
-  REBOOT:   5,   // Server upgrade needed, announced, rebooted, now watch for server to come back online
-}
-
-//  Data used to communicate with the RCON interface
-var rconObj = {
-  socket:   null,   //  Working var for websocket interface
-  server:   null,   //  Default IP address/port for Rust server web RCON
-  password: null,   //  Default web RCON password
-  command:  null,   //  Command to send to Rust server console
-  id:       1,      //  Message id sent along with command; id is sent back with return message
-  json:     null,   //  Return results as JSON, otherwise line-by-line text
-  quiet:    null,   //  Don't display any return message
+const states = {
+  STOP: 0,
+  BOOT: 1,
+  RUNNING: 2,
+  ANNOUNCE: 3,
+  UPGRADE: 4,
+  REBOOT: 5,
 };
 
-//  Process operational values
-var rusty = {
-  rcon:         rconObj,
-  operation:    states.RUNNING, //  Current operational mode of RustyNail
-  config:       null,           //  location/name of configuration file
-  configDate:   new Date(),     //  DateTime config file was last changed and read
-  manifest:     null,           //  Location of Rust server Steam current state
-  manifestDate: new Date(),     //  DateTime manufest file was last changed and read
-  seedDate:     new Date(),     //  Previous date of new seed has been saved to the config file
-  buildid:      null,           //  Current buildid of Rust server
-  branch:       null,           //  Development branch of Rust server
-  instance:     null,           //  Rust server name
-  launchfile:   null,           //  Name of batch file used to start Rust server
-  launchdir:    null,           //  Location of batch file used to start Rust server
-  launchexec:   null,           //  Sub-location to the Rust server executable
-  autostart:    true,           //  Does script perform Rust server autostart if not already running?
-  autofail:     true,           //  Does script perform Rust server recovery if it permanently stops responding?
-  autoupdate:   true,           //  Does script perform Rust server updating when they become available?
-  timer:        null,           //  Delay in miliseconds between main loop cycles
-  timeout:      null,           //  Timeout in miliseconds for messages that check Rust server availability
-  unavail:      10,             //  How many main loop cycles a server can be unavailable before sending unavail email notive
-  failsafe:     5,              //  Multiplier x unavail for Rust server to be considered permanently unavailable and needs taskkill
-  announce:     null,           //  Message displayed in-game before server reboots for updates
-  ticks:        5,              //  How many times to send Rust server in-game message to online players
-  emuser:       null,           //  Login username for sending email notifications
-  empass:       null,           //  Login password for sending email notifications
-  emupdate:     false,          //  Email notifications for server updates?
-  emunavail:    false,          //  Email notifications when server is unavailable beyond "ticks" count
-  emailUpdate:  null,           //  List of email address recipients for server update notifications
-  emailUnavail: null,           //  List of email address recipients for server unavailability notifications
-  eminstance:   null,           //  Text prefix for email notifications (usally server instance name)
+const rconObj = {
+  socket: null,
+  server: null,
+  password: null,
+  command: null,
+  id: 1,
+  json: null,
+  quiet: null,
 };
 
-//  Setup some critical default values
-var defaults = {
-  appID:        `258550`,   //  Steam depot id for Rust dedicated server
-  server:       `127.0.0.1:28016`,
-  password:     ``,
-  config:       `rustytoolbox.json`,
-  manifest:     `C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf`,
-  seedDate:     new Date(1 + " January 1900"),  //  Default dummy value to indicate no previous date of new seed has been saved to the config file
-  autostart:    true,
-  autofail:     true,
-  autoupdate:   true,
-  timer:        60000,
-  timeout:      2000,
-  announce:     `Update released by Facepunch, server rebooting to update`,
-  ticks:        5,
+const defaults = {
+  appID: '258550',
+  server: '127.0.0.1:28016',
+  password: '',
+  config: 'rustytoolbox.json',
+  manifest: 'C:\\Server\\rustds\\steamapps\\appmanifest_258550.acf',
+  seedDate: new Date("January 1, 1900"),
+  autostart: true,
+  autofail: true,
+  autoupdate: true,
+  timer: 60000,
+  timeout: 2000,
+  announce: 'Update released by Facepunch, server rebooting to update',
+  ticks: 5,
 };
 
-var datetimeOptions = {
+const datetimeOptions = {
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
   hour: '2-digit',
-  minute: '2-digit'
+  minute: '2-digit',
 };
 
+const rusty = {
+  rcon: rconObj,
+  operation: states.RUNNING,
+  config: program.config ? program.config : defaults.config,
+  configDate: new Date(),
+  manifest: null,
+  manifestDate: new Date(),
+  seedDate: new Date(),
+  buildid: null,
+  branch: null,
+  instance: null,
+  launchfile: null,
+  launchdir: null,
+  launchexec: null,
+  autostart: true,
+  autofail: true,
+  autoupdate: true,
+  timer: null,
+  timeout: null,
+  unavail: 10,
+  failsafe: 5,
+  announce: null,
+  ticks: 5,
+  emuser: null,
+  empass: null,
+  emupdate: false,
+  emunavail: false,
+  emailUpdate: null,
+  emailUnavail: null,
+  eminstance: null,
+};
 
-//  Process command-line options
+// Process command-line options
 program
   .version('0.5.0')
   .usage('[options]')
-  .option('-c, --config <file>' ,         `path and filename of optional config file`)
-  .option('-s, --server <host:port>' ,    `server IP address:port`)
-  .option('-p, --password <password>',    `server password`)
-  .option('-m, --manifest <path>',        `location of manifest file`)
-  .option('-l, --launchfile <filename>',  `name of batch file to launch Rust`)
-  .option('-m, --launchdir <path>',       `directory of launchfile batch file`)
-  .option('-e, --launchexec <path>',      `sub-directory/path of Rust executable`)
-  .option('-i, --autostart',              `disable autostart by setting false`)
-  .option('-j, --autofail',               `disable failsafe recovery by setting false`)
-  .option('-k, --autoupdate',             `disable updates by setting false`)
-  .option('-t, --timer <milliseconds>',   `check loop timer in milliseconds`)
-  .option('-o, --timeout <milliseconds>', `timeout value for RCON availability checks`)
-  .option('-n, --unavail <number>',       `unavailability ticks`)
-  .option('-n, --failsafe <multiplier>',  `unavail multiplier to recover crashed server`)
-  .option('-a, --announce <message>',     `pre-upgrade in-game message`)
-  .option('-b, --ticks <number>',         `number of times to repeat update message`)
-  .option('-u, --emuser <email address>', `email address for sending email`)
-  .option('-v, --empass <password>',      `email user password`)
-  .option('-w, --emupdate',               `enable sending email for updates`)
-  .option('-x, --emunavail',              `enable sending email for unavailability`)
-  .option('-f, --forcecfg',               `config file overrides command-line options`)
+  .option('-c, --config <file>', 'path and filename of optional config file')
+  .option('-s, --server <host:port>', 'server IP address:port')
+  .option('-p, --password <password>', 'server password')
+  .option('-m, --manifest <path>', 'location of manifest file')
+  .option('-l, --launchfile <filename>', 'name of batch file to launch Rust')
+  .option('-d, --launchdir <path>', 'directory of launchfile batch file')
+  .option('-e, --launchexec <path>', 'sub-directory/path of Rust executable')
+  .option('-i, --autostart', 'disable autostart by setting false', defaults.autostart)
+  .option('-j, --autofail', 'disable failsafe recovery by setting false', defaults.autofail)
+  .option('-k, --autoupdate', 'disable updates by setting false', defaults.autoupdate)
+  .option('-t, --timer <milliseconds>', 'check loop timer in milliseconds', defaults.timer)
+  .option('-o, --timeout <milliseconds>', 'timeout value for RCON availability checks', defaults.timeout)
+  .option('-n, --unavail <number>', 'unavailability ticks', defaults.unavail)
+  .option('-f, --failsafe <multiplier>', 'unavail multiplier to recover crashed server', defaults.failsafe)
+  .option('-a, --announce <message>', 'pre-upgrade in-game message', defaults.announce)
+  .option('-b, --ticks <number>', 'number of times to repeat update message', defaults.ticks)
+  .option('-u, --emuser <email address>', 'email address for sending email')
+  .option('-v, --empass <password>', 'email user password')
+  .option('-w, --emupdate', 'enable sending email for updates')
+  .option('-x, --emunavail', 'enable sending email for unavailability')
+  .option('-f, --forcecfg', 'config file overrides command-line options')
   .parse(process.argv);
 
-//  Most important to know where the config file is located!!!
-rusty.config    = program.config ? program.config : defaults.config;
+// Assign command-line options to `rusty` object
+Object.assign(rusty, program.opts());
 
 //
 //  MAIN LOOP
@@ -271,51 +263,42 @@ rusty.config    = program.config ? program.config : defaults.config;
 //  END MAIN LOOP
 //
 
-function readFile(file) {
-//  Reads all data from a file and returns the result.
-//  Only good for smaller sized files.
-  return new Promise(function(resolve, reject) {
-    try {
-      var data = '';
-      var readStream = fs.createReadStream(file, 'utf8');
-      readStream.on('data', function(chunk) {
-        data += chunk;
-      }).on('end', function() {
-        readStream.close();
-        resolve(data);
-      });
-    } catch(e) {
-      console.log(e)
-    }
-  });
+
+
+async function readFile(file) {
+  try {
+    return await fsp.readFile(file, 'utf8');
+  } catch (e) {
+    console.error(e);
+    throw e; // It's usually better to throw the error to let the caller handle it
+  }
 }
 
 async function checkManifest(file) {
-//  Try not to waste time re-reading rust server manifest after booting
-//  RustyNail unless the modified date/time changes, which would indicate
-//  the server was updated or re-installed outside of script control
-//  while script was running.
   try {
     const stats = await fs.promises.stat(file);
-    if (!rusty.manifestDate || stats.mtime.getTime() !== rusty.manifestDate.getTime()) {
-      try {
-        const data = await fs.promises.readFile(file, 'utf8');
-        const manifest = vdf.parse(data);
-        if (manifest && manifest['AppState']) {
-          rusty.branch = manifest['AppState']['UserConfig'] && manifest['AppState']['UserConfig']['betakey']
-            ? manifest['AppState']['UserConfig']['betakey']
-            : "public";
-          rusty.buildid = manifest['AppState']['buildid'] || rusty.buildid;
-          rusty.manifestDate = stats.mtime;
-        }
-      } catch(e) {
-        console.log("Error parsing manifest:", e);
-      }
+    // If the file hasn't changed, exit early
+    if (rusty.manifestDate && stats.mtime.getTime() === rusty.manifestDate.getTime()) {
+      return;
     }
-  } catch(e) {
-    console.log("Error accessing manifest file:", e);
+
+    const data = await fs.promises.readFile(file, 'utf8');
+    const manifest = vdf.parse(data);
+    if (!manifest || !manifest['AppState']) {
+      return; // Or throw an error if the manifest structure is critical
+    }
+
+    // Simplified assignments with logical OR for defaults
+    rusty.branch = manifest['AppState']['UserConfig']?.BetaKey || "public";
+    rusty.buildid = manifest['AppState']['buildid'] || rusty.buildid;
+    rusty.manifestDate = stats.mtime;
+
+  } catch (e) {
+    console.log(`Error processing manifest file ${file}:`, e);
   }
 }
+
+
 
 async function checkConfig(file) {
 //  Loads all the script configuration values from either
@@ -378,251 +361,207 @@ function setConfig(jsonConfig, rustyVar, configKey) {
   }
 }
 
+
+
 function printConfig() {
-  console.log();
-  console.log(`rcon.socket:   ${rusty.rcon.socket}`);
-  console.log(`rcon.server:   ${rusty.rcon.server}`);
-  console.log(`rcon.password: ${rusty.rcon.password}`);
-  console.log(`rcon.command:  ${rusty.rcon.command}`);
-  console.log(`rcon.id:       ${rusty.rcon.id}`);
-  console.log(`rcon.json:     ${rusty.rcon.json}`);
-  console.log(`rcon.quiet:    ${rusty.rcon.quiet}`);
-  console.log(`operation:     ${rusty.operation}`);
-  console.log(`config:        ${rusty.config}`);
-  console.log(`configDate:    ${rusty.configDate}`);
-  console.log(`manifest:      ${rusty.manifest}`);
-  console.log(`manifestDate:  ${rusty.manifestDate}`);
-  console.log(`seedDate:      ${rusty.seedDate}`);
-  console.log(`buildid:       ${rusty.buildid}`);
-  console.log(`branch:        ${rusty.branch}`);
-  console.log(`instance:      ${rusty.instance}`);
-  console.log(`launchfile:    ${rusty.launchfile}`);
-  console.log(`launchdir:     ${rusty.launchdir}`);
-  console.log(`launchexec:    ${rusty.launchexec}`);
-  console.log(`autostart:     ${rusty.autostart}`);
-  console.log(`autofail:      ${rusty.autofail}`);
-  console.log(`autoupdate:    ${rusty.autoupdate}`);
-  console.log(`timer:         ${rusty.timer}`);
-  console.log(`timeout:       ${rusty.timeout}`);
-  console.log(`unavail:       ${rusty.unavail}`);
-  console.log(`failsafe:      ${rusty.failsafe}`);
-  console.log(`announce:      ${rusty.announce}`);
-  console.log(`ticks:         ${rusty.ticks}`);
-  console.log(`emuser:        ${rusty.emuser}`);
-  console.log(`empass:        ${rusty.empass}`);
-  console.log(`emupdate:      ${rusty.emupdate}`);
-  console.log(`emunavail:     ${rusty.emunavail}`);
-  console.log(`emailUpdate:   ${rusty.emailUpdate}`);
-  console.log(`emailUnavail:  ${rusty.emailUnavail}`);
-  console.log(`eminstance:    ${rusty.eminstance}`);
-  console.log();
+  console.log(); // Print an empty line for spacing
+  
+  // Function to print properties of an object
+  const printProperties = (obj, prefix = '') => {
+      Object.keys(obj).forEach(key => {
+          // Check if the value is an object and not null
+          if (typeof obj[key] === 'object' && obj[key] !== null) {
+              // Recursive call for nested objects
+              printProperties(obj[key], `${prefix}${key}.`);
+          } else {
+              console.log(`${prefix}${key}: ${obj[key]}`);
+          }
+      });
+  };
+  
+  // Print properties for rusty and rcon objects
+  printProperties(rusty, 'rusty.');
+  printProperties(rusty.rcon, 'rusty.rcon.');
+
+  console.log(); // Print an empty line for spacing
 }
 
-function sendEmail(eaddress, esubject, emessage) {
-//  Sends a single notification email from the system.
-  var transporter = nodemailer.createTransport({
-    host:   'smtp.gmail.com',
-    port:   465,
+// Create a transporter object using the default SMTP transport.
+// This function assumes that rusty.emuser and rusty.empass are already set.
+// Consider calling this function once and reusing the transporter object if sending multiple emails.
+const createTransporter = () => nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
     secure: true,
     auth: {
-      user: rusty.emuser,
-      pass: rusty.empass
+        user: rusty.emuser,
+        pass: rusty.empass
     }
-  });
-  var mailOptions = {
-    from:    rusty.emuser,
-    to:      eaddress,
-    subject: esubject,
-    text:    emessage
-  };
-  transporter.sendMail(mailOptions, function(error, info){
-    if (error) {
-      console.log(error);
-    } else {
-      console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ':  Emailed: ' + eaddress);
+});
+
+// Define the sendEmail function as an async function to use await.
+async function sendEmail(eaddress, esubject, emessage) {
+    const transporter = createTransporter(); // Reuse transporter if applicable
+    const mailOptions = {
+        from: rusty.emuser,
+        to: eaddress,
+        subject: esubject,
+        text: emessage
+    };
+
+    try {
+        const info = await transporter.sendMail(mailOptions);
+        console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ':  Emailed: ' + eaddress);
+    } catch (error) {
+        console.log(error);
     }
-  });
 }
 
-function sendEmails(elist, esubject, emessage) {
-//  Send emails to a list of recipients.
-  elist.forEach(function(element) {
-      sendEmail(element, esubject, emessage);
-  });
+async function sendEmails(elist, esubject, emessage) {
+  // Assuming sendEmail is now an async function.
+  for (const email of elist) {
+      try {
+          await sendEmail(email, esubject, emessage);
+      } catch (error) {
+          console.log(`Failed to send email to ${email}: ${error.message}`);
+      }
+  }
 }
 
 async function checkStatus() {
-//  Sends a RCON message to check whether the Rust
-//  server is available and responsive.
+  // Sets the RCON command to check server status.
   rusty.rcon.command = 'version';
-  var retval;
+  
   try {
-    retval = await status();
-    return retval;
-  } catch(e) {
-    console.log('console command returned error: ' + e)
+    // Awaits the status check result directly without intermediate variable.
+    return await status();
+  } catch (error) {
+    // Improved error logging for clarity.
+    console.error(`Error during server status check: ${error}`);
+    return false; // Explicitly returns false in case of error.
   }
-  return false;
 }
 
 async function status() {
-//  Checks the status of a Rust server. Uses multiple promise calls
-//  in a race function with one as a simple timer. Either the status
-//  message returns in time, or the timeout returns and the entire
-//  reuest is canceled and status is returned as false.
-  return await Promise.race([
-    consoleapi.sendCommand(rusty.rcon),
-    new Promise(function(resolve, reject) { setTimeout(reject, rusty.timeout); })
-  ]).then(function(value, reason) {
-    if (!value['error']) {
-        return true;
-      }
-      else {
-        return false;
-      }
-    }, function(value, reason) {
-      return false;
-    });
+  // Attempts to check the status of the Rust server. Times out if it takes too long.
+  try {
+    const result = await Promise.race([
+      consoleapi.sendCommand(rusty.rcon),
+      new Promise((resolve, reject) => setTimeout(() => reject(new Error('Timeout')), rusty.timeout))
+    ]);
+
+    // If 'error' key is not present or false, assume successful status check.
+    return !result.error;
+  } catch (error) {
+    console.error(`Error or timeout occurred checking server status: ${error.message}`);
+    return false; // Ensure function returns false on error or timeout.
+  }
 }
 
-function getInstance() {
-//  Gets the name of the Rust server instance. There has to be a simpler
-//  way to do this search and string isolation...
-  return new Promise(function(resolve, reject) {
-    try {
-      if (rusty.launchfile) {
-        var instream   = fs.createReadStream(rusty.launchdir + "\\" + rusty.launchfile);
-        var outstream  = new stream;
-        var launchfile = readline.createInterface(instream, outstream);
+async function getInstance() {
+  // Simplifies the retrieval of the Rust server's instance name from the launch file.
+  if (!rusty.launchfile) return null; // Early return if launchfile is not set.
 
-        launchfile.on('line', function(line) {
-          //  This seems like a really ugly way to parse the instance name
-          var firstString = line.search("server.hostname");
-          if (firstString != -1) {
-            var secondString = line.slice(firstString+15).replace(/^\s+/, '');
+  try {
+    const filePath = path.join(rusty.launchdir, rusty.launchfile);
+    const data = await fsp.readFile(filePath, 'utf8');
 
-            var forthString;
-            if (secondString[0] == '"') {
-              var res = secondString.match(/"(.*?)"/i);
-              forthString = res ? res[1] : null;
-            } else {
-              forthString = secondString.match(/\w+/)[0];
-            }
-            if (forthString == -1 || forthString == "" || forthString == false) {
-              forthString = null;
-            } else {
-              forthString = forthString.trim();
-            }
-            resolve(forthString);
-          }
-        });
-
-        launchfile.on('close', function() {
-        });
-      }
-    } catch(e) {
-      console.log(e);
-    }
-  });
+    // Use a regular expression to extract the instance name directly.
+    const match = data.match(/server\.hostname\s+"([^"]+)"/i);
+    return match ? match[1].trim() : null;
+  } catch (error) {
+    console.error(`Error retrieving instance name: ${error}`);
+    return null; // Return null in case of any error.
+  }
 }
 
 async function findTask(launcherOnly = false) {
-//  Result of that command should return 2 pid's if launcherOnly is false
-//  Create an array of all returned pid's and kill them all
-  return new Promise(function(resolve, reject) {
-    var query;
+  // Composes a query to find processes related to the Rust server based on the launcher or the Rust executable.
+  let query = launcherOnly
+    ? `caption LIKE '%cmd.exe%' AND commandline LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}%' AND commandline LIKE '%${rusty.launchfile}%'`
+    : `(caption LIKE '%cmd.exe%' AND commandline LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}%' AND commandline LIKE '%${rusty.launchfile}%') OR executablepath LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}\\\\${rusty.launchexec.replace(/\\/g, '\\\\')}%'`;
 
-    // This query allows for more than one server running for windows host
-    if (launcherOnly) {
-      query = "caption LIKE '%cmd.exe%' AND commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%'";
-    } else {
-      query = "(caption LIKE '%cmd.exe%' AND commandline LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "%' AND commandline LIKE '%" + rusty.launchfile + "%') OR executablepath LIKE '%" + rusty.launchdir.replace(/\\/g, '\\\\') + "\\\\" + rusty.launchexec.replace(/\\/g, '\\\\') + "%'";
-    }
+  try {
+    const { stdout } = await cpExec(`wmic process where "${query}" get ProcessId 2>nul | MORE +1`);
+    const processIds = stdout
+      .trim()
+      .split("\r\n")
+      .map(line => line.trim())
+      .filter(line => line);
 
-    cp.exec(`wmic process where "` + query + `" get ProcessId 2>nul | MORE +1`,
-      function(error, data) {
-        newarray = '';
-        if (data) {
-          var newarray = data.trim().split("\r\n").map(function(e) {
-            e = e.trim();
-            return e;
-          }).filter(e =>  e);
-        }
-        resolve(newarray);
-      }
-    );
-  });
+    return processIds;
+  } catch (error) {
+    console.error(`Error finding tasks: ${error}`);
+    return []; // Return an empty array to indicate no processes found or in case of an error.
+  }
 }
 
 async function checkTask() {
-  var res = await findTask(true);
-  if (res.length >= 1 ) {
-    return true;
-  }
-  return false;
+  // This function checks if there is at least one task related to the Rust server launcher.
+  const processIds = await findTask(true);
+  return processIds.length >= 1;
 }
 
 async function endTask() {
-//  Kill each task associated with a pid, probably
-//  some of these will no longer exist beforehand.
-  return new Promise(async function(resolve, reject) {
-    var pidList = await findTask();
-    if (pidList.length > 1) {
-      pidList.forEach(function(item) {
-        cp.exec(`taskkill /t /f /pid ${item}`,
-          function(error, data) {
-        });
-      });
+  // Kills each task associated with a PID from the list obtained by findTask.
+  const pidList = await findTask();
+  for (const item of pidList) {
+    try {
+      await cp.promises.exec(`taskkill /t /f /pid ${item}`);
+    } catch (error) {
+      console.error(`Error killing process ${item}:`, error);
     }
-    resolve();
-  });
+  }
 }
 
 async function startRust() {
   await endTask();
-  await cp.exec(`start cmd /c "cd ` + rusty.launchdir + ` && ` + rusty.launchfile + `"`,
-    function(error, data) {
-  });
+  try {
+    const { stdout, stderr } = await cpExec(`start cmd /c "cd ${rusty.launchdir} && ${rusty.launchfile}"`);
+    if (stdout) console.log(stdout);
+    if (stderr) console.error(stderr);
+  } catch (error) {
+    console.error('Failed to start Rust:', error);
+  }
 }
 
 async function restartServer() {
-  await startRust();
+  console.log('Restarting Rust server...');
+  try {
+    await startRust();
+    console.log('Rust server restarted successfully.');
+  } catch (error) {
+    console.error('Failed to restart Rust server:', error);
+  }
 }
 
 function isFirstThursday() {
-//  Could be made more generic, but to start, just
-//  check if today is 1st Thursday of the month.
-  var todayDay = new Date();
-  var targetDay, curDay = 0, i = 1;
+  const today = new Date();
+  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const firstThursday = (1 + (7 - firstDayOfMonth.getDay())) % 7 + 1; // Calculate first Thursday
 
-  while(curDay < 1 && i < 31) {
-    targetDay = new Date(todayDay.getMonth()+1 + " " + i++ + " " + todayDay.getFullYear());
-    if(targetDay.getDay() == 4) curDay++;
-  }
-  todayDay  = todayDay.setHours(0,0,0,0);   //  Only need to match day
-  targetDay = targetDay.setHours(0,0,0,0);
-
-  if(todayDay.valueOf() == targetDay.valueOf()) {
-    return true;
-  } else {
-    return false;
-  }
+  return today.getDate() === firstThursday;
 }
 
-function checkSeed() {
-//  Set a new seed in the Rust server launching batch file. Only
-//  set if no pre-existing seed or seed not already set today, like
-//  on 1st Thurday where Facepunch releases extra updates that same day).
-  var dateNow = new Date();
-  dateNow     = dateNow.setHours(0,0,0,0);
-  if ((rusty.seedDate.valueOf() == -2208970800000) || (rusty.seedDate.valueOf() < dateNow.valueOf())) {
-    console.log((new Date()).toLocaleString('en-US', datetimeOptions) + ":  Update on 1st Thursday, changing to new seed and salt");
-    var nextSeed = getRandomInt(0, 2147483647);
-    var nextSalt = getRandomInt(0, 2147483647);   //  Hope this range is OK for salt value, couldn't find reference
-    if (rusty.emupdate) sendEmails(rusty.emailUpdate, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt, rusty.eminstance + "update on 1st Thursday, changing to new seed " + nextSeed + " and salt " + nextSalt);
-    rusty.seedDate = dateNow;
-    readWriteConfig(dateNow);
-    newSeed(nextSeed, nextSalt);
+async function checkSeed() {
+  const today = new Date();
+  const beginningOfDay = new Date(today.setHours(0, 0, 0, 0));
+
+  // Check if it's time to update the seed
+  if (rusty.seedDate.valueOf() === -2208970800000 || rusty.seedDate < beginningOfDay) {
+    console.log(new Date().toLocaleString('en-US', datetimeOptions) + ": Update on 1st Thursday, changing to new seed and salt");
+
+    const nextSeed = getRandomInt(0, 2147483647);
+    const nextSalt = getRandomInt(0, 2147483647); // Assuming this range is acceptable for the salt value.
+
+    if (rusty.emupdate) {
+      const message = `${rusty.eminstance} update on 1st Thursday, changing to new seed ${nextSeed} and salt ${nextSalt}`;
+      sendEmails(rusty.emailUpdate, message, message);
+    }
+
+    rusty.seedDate = beginningOfDay;
+    await readWriteConfig(beginningOfDay);
+    await newSeed(nextSeed, nextSalt);
   }
 }
 
@@ -633,66 +572,61 @@ function getRandomInt(min, max) {
 }
 
 async function newSeed(seed, salt) {
-//  Save the new seed and salt in the launch file batch file.
-  var data     = await readFile(rusty.launchdir + "\\" + rusty.launchfile);
-  var oldarray = data.trim().split("\r\n");
+  try {
+    // Read the entire batch file contents
+    const filePath = `${rusty.launchdir}\\${rusty.launchfile}`;
+    let data = await fsp.readFile(filePath, 'utf8');
 
-  oldarray.forEach(function(item, index) {
-    //  Does this is line containing server startup command line?
-    var firstString = item.search("RustDedicated.exe");
-    if (firstString != -1) {
-      //  Update or replace the seed and salt values
-      var itemNew     = item.trim();
-      itemNew         = replaceEntry(itemNew, "server.seed", seed);
-      oldarray[index] = replaceEntry(itemNew, "server.salt", salt);
-    }
-  });
-  //  Write the new commnand line out to the batch file
-  fs.truncate(rusty.launchdir + "\\" + rusty.launchfile, 0, function() {
-      fs.writeFileSync(rusty.launchdir + "\\" + rusty.launchfile, oldarray.join("\r\n"), function (err) {
-          if (err) {
-              return console.log("Error writing file: " + err);
-          }
-      });
-  });
-  await restartServer();
-}
+    // Split the batch file content into lines
+    let lines = data.trim().split("\r\n");
 
-function replaceEntry(item, entry, value) {
-//  Replace an individual entry in the Rust batch file
-//  launcher command-line. If doesn't already exist, add it to the end.
-  var itemNew = item;
-  // does it contain an existing entry value?
-  var secondString = item.search(entry);
-  if (secondString != -1) {
-    // found existing entry value, updating it
-    var firstItem = item.substring(0, secondString + 11);
-    // add a new entry value
-    itemNew = firstItem + " " + value;
-    // remove all outside whitespace from second part
-    var secondItem = item.substring(secondString + 11).trim();
-    // is there a second part with additional command line entries?
-    var thirdItem = secondItem.match(/\s.*/);
-    if (thirdItem) {
-      // there is addional entries, clean them up and add
-      thirdItem = thirdItem[0].trim();
-      itemNew += " " + thirdItem;
-    }
-  } else {
-    // no existing entry, adding one
-    itemNew += " +" + entry + " " + value;
-  }
-  return itemNew;
-}
-
-function readWriteConfig(seedDate) {
-//  Update the config file with the date the seed & salt were updated.
-  var jsonConfig = JSON.parse(fs.readFileSync(rusty.config, 'utf8'));
-  jsonConfig.seedDate = seedDate;
-
-  fs.writeFileSync(rusty.config, JSON.stringify(jsonConfig, null, 4), 'utf8', function (err) {
-      if (err) {
-          return console.log(err);
+    // Update lines with the new seed and salt values
+    lines = lines.map(line => {
+      if (line.includes("RustDedicated.exe")) {
+        line = replaceEntry(line.trim(), "server.seed", seed);
+        line = replaceEntry(line, "server.salt", salt);
       }
-  });
+      return line;
+    });
+
+    // Write the updated content back to the batch file
+    await fsp.writeFile(filePath, lines.join("\r\n"));
+
+    // Restart the server
+    await restartServer();
+    console.log(`Updated seed to ${seed} and salt to ${salt}, and server restarted.`);
+  } catch (err) {
+    console.error("Error updating seed and salt in the launch file:", err);
+  }
+}
+
+function replaceEntry(commandLine, entry, value) {
+  // Check if the entry already exists in the command line
+  const entryPattern = new RegExp(`\\+${entry} \\d+`, 'i');
+  const entryExists = commandLine.match(entryPattern);
+
+  // If the entry exists, replace its value
+  if (entryExists) {
+    return commandLine.replace(entryPattern, `+${entry} ${value}`);
+  } else {
+    // If the entry does not exist, append it to the command line
+    return `${commandLine} +${entry} ${value}`;
+  }
+}
+
+async function readWriteConfig(seedDate) {
+  try {
+    // Read the existing config
+    const configContent = await fsp.readFile(rusty.config, 'utf8');
+    const jsonConfig = JSON.parse(configContent);
+    
+    // Update the seed date
+    jsonConfig.seedDate = seedDate;
+
+    // Write the updated config back to the file
+    await fsp.writeFile(rusty.config, JSON.stringify(jsonConfig, null, 4), 'utf8');
+    console.log('Configuration updated successfully.');
+  } catch (err) {
+    console.error('Error updating configuration:', err);
+  }
 }
