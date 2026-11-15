@@ -46,14 +46,15 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 ## Scope
 **Ken's direction (2026-11-14): fix RustyNail's identified bugs, and protect the rest of the Windows server. No new features.** Ask Ken before anything beyond a bug fix: dependency upgrades, rewrites (WMIC, RCON client, config schema), new options or modes.
 
-## Status (merged to `main` and `development`; staging deployed 2026-11-14, vanilla not yet)
+## Status (merged to `main` and `development`; staging and vanilla both run `28928d6` since 2026-11-15)
 Each fix has its own commit and tests:
 - **Fixed:** #1 to #9, the RCON hangs, `findTask` errors, password logging, hostname parsing and `--json` output.
 - **Main loop freeze after RustyNail starts the server (found on staging):** `startRust` awaited `exec('start ...')`, which waits until the server exits. It now launches with `spawn` and `stdio: 'ignore'` (`sys.launch`). Never launch long-running programs with `exec`.
 - **Verified by Ken on staging:** periodic version checks, starting the server when it isn't running at startup, and restarting it when it stops.
 - **steamcmd stall:** `branchapi.getBuildID` waited for steamcmd with no limit, so a stalled steamcmd froze the main loop. It now gives up after 5 minutes and logs it. It leaves the stalled steamcmd running rather than killing it, and won't start another lookup until that one exits.
-- **#10:** already fixed on `development`. Staging gets it when it's deployed.
-- **Dependency security upgrades (Ken approved 2026-11-15, merged to `main`, not yet deployed):** `ws` 8.16.0 → 8.23.0 and `nodemailer` 6.9.13 → 10.5.0. `npm audit` is clean. `test/rustynail-email.test.js` covers email alerts without touching the network. Live installs need `npm ci` after pulling.
+- **#10:** fixed, and deployed to both servers.
+- **Dependency security upgrades (Ken approved 2026-11-15, deployed to both servers):** `ws` 8.16.0 → 8.23.0 and `nodemailer` 6.9.13 → 10.5.0. `npm audit` is clean. `test/rustynail-email.test.js` covers email alerts without touching the network. Live installs need `npm ci` after pulling.
+- **Deployed 2026-11-15:** Ken pulled `28928d6` and ran `npm ci` on staging and vanilla, and restarted both RustyNails. Not yet seen on a real server: a full update cycle (announce, `quit`, SteamCMD update, back online), a forced restart after 45 minutes unresponsive (the first real kill), and the first-Thursday seed change (next: 2026-12-03).
 - **#1 safety:** before RustyNail looks up, kills or starts anything, `launchConfigProblem()` must accept the launch settings. The process query matches only this server's launcher `cmd.exe` and its exact `RustDedicated.exe` path. RustyNail's own PIDs are never killed, and the server starts only once the old processes are confirmed gone. This was checked on the host with dummy processes, and both live configs pass the validation.
 
 **Not changed, so mention them to Ken rather than fixing them:**
