@@ -7,7 +7,6 @@ const sandbox = require('./helpers/sandbox');
 const { test } = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
-const { knownBug } = require('./helpers/known-bug');
 
 const script = path.join(__dirname, '..', 'rustyconsole', 'rustyconsole.js');
 const preloads = ['-r', path.join(__dirname, 'helpers', 'sandbox.js'), '-r', path.join(__dirname, 'helpers', 'fake-ws-preload.js')];

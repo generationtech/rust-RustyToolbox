@@ -14,7 +14,6 @@ const stream = require('stream');
 const vdf = require('vdf');
 const program = require('commander');
 const nodemailer = require('nodemailer');
-const cp = require("child_process");
 const branchapi = require('../rustybranch/branchapi');
 const consoleapi = require('../rustyconsole/consoleapi');
 const { exit } = require('process');
@@ -526,61 +525,117 @@ async function getInstance() {
   }
 }
 
+//  This server is one of several on a shared Windows host, and endTask force-kills whole process
+//  trees. The launch settings feed the process search, so they must identify this one server.
+//  Returns a description of the problem, or null when the settings are usable.
+function launchConfigProblem() {
+  const values = { launchdir: rusty.launchdir, launchfile: rusty.launchfile, launchexec: rusty.launchexec };
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value !== 'string' || value.trim() === '') return `${name} is not set`;
+    if (/['"%\[\]]/.test(value)) return `${name} contains a quote, % or [ ] character`;
+    if (/rustadminrelease/i.test(value)) return `${name} points into a RustAdminRelease directory`;
+  }
+  if (!path.win32.isAbsolute(rusty.launchdir)) return `launchdir must be a full path (${rusty.launchdir})`;
+  if (rusty.launchdir.split(/[\\/]+/).filter(Boolean).length < 2) return `launchdir is a drive root (${rusty.launchdir})`;
+  if (/[\\/]/.test(rusty.launchfile)) return 'launchfile must be a file name without a folder';
+  if (!/\.(bat|cmd)$/i.test(rusty.launchfile)) return 'launchfile must be a .bat or .cmd file';
+  if (!/\.exe$/i.test(rusty.launchexec)) return 'launchexec must be an .exe file';
+  if (!fs.existsSync(path.join(rusty.launchdir, rusty.launchfile))) return `launchfile ${rusty.launchfile} was not found in launchdir ${rusty.launchdir}`;
+  return null;
+}
+
+//  Lists the PIDs of this Rust server's launcher cmd.exe (and, unless launcherOnly, its RustDedicated.exe).
+//  Returns null when that can't be determined; callers must not read null as "not running".
 async function findTask(launcherOnly = false) {
-  // Composes a query to find processes related to the Rust server based on the launcher or the Rust executable.
-  let query = launcherOnly
-    ? `caption LIKE '%cmd.exe%' AND commandline LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}%' AND commandline LIKE '%${rusty.launchfile}%'`
-    : `(caption LIKE '%cmd.exe%' AND commandline LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}%' AND commandline LIKE '%${rusty.launchfile}%') OR executablepath LIKE '%${rusty.launchdir.replace(/\\/g, '\\\\')}\\\\${rusty.launchexec.replace(/\\/g, '\\\\')}%'`;
+  const problem = launchConfigProblem();
+  if (problem) {
+    console.error(`Not looking for Rust server processes: ${problem}`);
+    return null;
+  }
+
+  const wql = (s) => s.replace(/\\/g, '\\\\');                       //  WQL strings escape backslashes
+  const dir = wql(rusty.launchdir.replace(/[\\/]+$/, ''));
+  const file = wql(rusty.launchfile);
+  //  cmd.exe running the batch file, as started by startRust (cd <dir> && <file>) or by its full path,
+  //  but never the cmd.exe that runs this wmic query
+  const launcher = `(caption = 'cmd.exe' AND NOT commandline LIKE '%wmic%' AND (commandline LIKE '%cd ${dir} && ${file}%' OR commandline LIKE '%${dir}\\\\${file}%'))`;
+  const query = launcherOnly ? launcher : `${launcher} OR executablepath = '${dir}\\\\${wql(rusty.launchexec)}'`;
 
   try {
-    const { stdout } = await cpExec(`wmic process where "${query}" get ProcessId 2>nul | MORE +1`);
-    const processIds = stdout
-      .trim()
-      .split("\r\n")
+    //  Called directly (no "2>nul | MORE +1"), so a failed query rejects instead of looking like "no processes"
+    const { stdout } = await cpExec(`wmic process where "${query}" get ProcessId`);
+    return stdout
+      .split(/\r?\n/)
       .map(line => line.trim())
-      .filter(line => line);
-
-    return processIds;
+      .filter(line => /^\d+$/.test(line));
   } catch (error) {
     console.error(`Error finding tasks: ${error}`);
-    return []; // Return an empty array to indicate no processes found or in case of an error.
+    return null;
   }
 }
 
 async function checkTask() {
   // This function checks if there is at least one task related to the Rust server launcher.
   const processIds = await findTask(true);
+  if (processIds === null) {
+    //  Unknown: report "running" so a second copy of the server is never started
+    console.error('Could not check whether the Rust server is running; assuming it is');
+    return true;
+  }
   return processIds.length >= 1;
 }
 
+//  Kills this Rust server's processes. Returns true only when none are left afterwards.
 async function endTask() {
-  // Kills each task associated with a PID from the list obtained by findTask.
   const pidList = await findTask();
+  if (pidList === null) return false;
+  if (pidList.length === 0) return true;
+
   for (const item of pidList) {
+    const pid = Number(item);
+    if (!Number.isInteger(pid) || pid <= 4 || pid === process.pid || pid === process.ppid) {
+      console.error(`Not killing process ${item}: it is RustyNail itself, its console, or a system process`);
+      continue;
+    }
     try {
-      await cp.promises.exec(`taskkill /t /f /pid ${item}`);
+      await cpExec(`taskkill /t /f /pid ${pid}`);
     } catch (error) {
-      console.error(`Error killing process ${item}:`, error);
+      //  Usually the process already exited as part of an earlier tree kill
+      console.error(`Error killing process ${pid}:`, error.message);
     }
   }
+
+  await sys.sleep(2000);                                            //  Give Windows a moment to tear down
+  const remaining = await findTask();
+  if (remaining === null || remaining.length > 0) {
+    console.error(`Rust server processes still running after kill: ${remaining === null ? 'unknown' : remaining.join(', ')}`);
+    return false;
+  }
+  return true;
 }
 
+//  Returns true if the server was launched.
 async function startRust() {
-  await endTask();
+  if (!(await endTask())) {
+    console.error('Not starting Rust: could not confirm that the old server processes are stopped');
+    return false;
+  }
   try {
     const { stdout, stderr } = await cpExec(`start cmd /c "cd ${rusty.launchdir} && ${rusty.launchfile}"`);
     if (stdout) console.log(stdout);
     if (stderr) console.error(stderr);
+    return true;
   } catch (error) {
     console.error('Failed to start Rust:', error);
+    return false;
   }
 }
 
 async function restartServer() {
   console.log('Restarting Rust server...');
   try {
-    await startRust();
-    console.log('Rust server restarted successfully.');
+    const started = await startRust();
+    console.log(started ? 'Rust server restarted successfully.' : 'Rust server was NOT restarted.');
   } catch (error) {
     console.error('Failed to restart Rust server:', error);
   }
@@ -693,7 +748,7 @@ module.exports = {
   applyCliOptions, newLoopState, main, tick,
   checkConfig, setConfig, printConfig, checkManifest,
   checkStatus, status, getInstance,
-  findTask, checkTask, endTask, startRust, restartServer,
+  launchConfigProblem, findTask, checkTask, endTask, startRust, restartServer,
   isFirstThursday, checkSeed, getRandomInt, newSeed, replaceEntry, readWriteConfig,
   sendEmails,
 };

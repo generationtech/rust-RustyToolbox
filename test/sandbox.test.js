@@ -25,7 +25,9 @@ test('project modules load the faked exec (rustynail findTask goes through the s
   sandbox.reset();
   sandbox.setExecHandler(() => ({ stdout: '' }));
   const rustynail = require('../rustynail/rustynail');
-  Object.assign(rustynail.rusty, { launchdir: 'X:\\nowhere', launchfile: 'a.bat', launchexec: 'b.exe' });
+  const srv = require('./helpers/fixtures').makeServerDir();
+  t.after(() => srv.cleanup());
+  Object.assign(rustynail.rusty, { launchdir: srv.dir, launchfile: srv.launchfile, launchexec: 'Server\\RustDedicated.exe' });
   await rustynail.findTask(true);
   assert.match(sandbox.execCalls[0], /^wmic process where/);
   sandbox.reset();

@@ -5,7 +5,6 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const consoleapi = require('../rustyconsole/consoleapi');
 const { startFakeRcon } = require('./helpers/fake-rcon');
-const { knownBug } = require('./helpers/known-bug');
 const { captureConsole } = require('./helpers/fixtures');
 
 function rcon(fake, extra = {}) {

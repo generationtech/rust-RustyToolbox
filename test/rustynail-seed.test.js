@@ -4,7 +4,6 @@ const sandbox = require('./helpers/sandbox');
 const { test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
 const rustynail = require('../rustynail/rustynail');
-const { knownBug } = require('./helpers/known-bug');
 const { makeServerDir, makeResetter, captureConsole } = require('./helpers/fixtures');
 
 const { rusty } = rustynail;

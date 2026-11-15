@@ -9,7 +9,6 @@ const assert = require('node:assert');
 const rustynail = require('../rustynail/rustynail');
 const consoleapi = require('../rustyconsole/consoleapi');
 const branchapi = require('../rustybranch/branchapi');
-const { knownBug } = require('./helpers/known-bug');
 const { makeServerDir, makeResetter, captureConsole } = require('./helpers/fixtures');
 
 const { rusty, states } = rustynail;
@@ -44,7 +43,12 @@ function setUp(t, options = {}) {
     return world.steam;
   });
   t.mock.method(rustynail.sys, 'sleep', async (ms) => { world.sleeps.push(ms); });
-  sandbox.setExecHandler((cmd) => (cmd.startsWith('wmic ') ? { stdout: world.running ? '4321  \r\n\r\n' : '\r\n' } : {}));
+  // Fake Windows: wmic finds the server while it runs; taskkill stops it; start is recorded.
+  sandbox.setExecHandler((cmd) => {
+    if (cmd.startsWith('wmic ')) return { stdout: world.running ? 'ProcessId  \r\r\n4321  \r\r\n\r\r\n' : '\r\r\n' };
+    if (cmd.startsWith('taskkill ')) world.running = false;
+    return {};
+  });
 
   world.logs = captureConsole(t);
   world.loop = rustynail.newLoopState();

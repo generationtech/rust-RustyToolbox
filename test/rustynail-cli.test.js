@@ -7,7 +7,6 @@ const sandbox = require('./helpers/sandbox');
 const { test } = require('node:test');
 const assert = require('node:assert');
 const rustynail = require('../rustynail/rustynail');
-const { knownBug } = require('./helpers/known-bug');
 
 const { rusty, program } = rustynail;
 
