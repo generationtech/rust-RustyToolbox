@@ -43,32 +43,24 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 - **`knownBug(id, name, fn)`** (in `known-bug.js`): `fn` asserts the *correct* behavior. The test passes while the bug exists and fails with "looks fixed" once it's fixed. When you fix a bug, change its `knownBug(...)` to `test(...)`.
 - **`rustynail.js` exports its functions.** Its main loop body is `tick(loop)`, and it only parses arguments and runs `main()` when executed directly. Tests drive it one `tick()` at a time, mocking `consoleapi.sendCommand`, `branchapi.getBuildID` and `sys.sleep`.
 
-## Roadmap
-Stop and report to Ken after each step.
+## Scope
+**Ken's direction (2026-11-14): fix RustyNail's identified bugs, and protect the rest of the Windows server. No new features.** Ask Ken before anything beyond a bug fix: dependency upgrades, rewrites (WMIC, RCON client, config schema), new options or modes.
 
-**Phase 0 (branch `modernize/phase-0`)**
-1. Done: reconnaissance.
-2. Done: toolchain.
-3. Done: guardrails.
-4. Done: test harness.
-5. **Kill-path safety, before any bug fix:**
-   - Config validation: refuse to run if `launchdir`, `launchfile` or `launchexec` is missing, doesn't exist, is too broad, or is inside `RustAdminRelease`.
-   - Dry-run mode (a command-line flag and a config key): log the PIDs and command lines that `endTask` would kill, without killing them.
-   - Pre-kill check: only kill `cmd.exe` running the configured batch file, or the configured `RustDedicated.exe` path.
-   - Tests for all of the above. Then, with Ken, run the dry-run against one real server and show Ken the output.
+## Status (branch `modernize/phase-0`, not pushed or deployed)
+Each fix has its own commit and tests:
+- **Fixed:** #1 to #9, the RCON hangs, `findTask` errors, password logging, hostname parsing and `--json` output.
+- **#10:** already fixed on `development`. Staging gets it when it's deployed.
+- **#1 safety:** before RustyNail looks up, kills or starts anything, `launchConfigProblem()` must accept the launch settings. The process query matches only this server's launcher `cmd.exe` and its exact `RustDedicated.exe` path. RustyNail's own PIDs are never killed, and the server starts only once the old processes are confirmed gone. This was checked on the host with dummy processes, and both live configs pass the validation.
 
-**After phase 0**
-- Fix the bugs one at a time (a failing test, then a small commit).
-- Upgrade the dependencies (`ws`, `nodemailer`, `commander`).
-- Replace WMIC with `Get-CimInstance`.
-- Rewrite the RCON client with Identifier matching, timeouts and close handling.
-- Add a config schema with explicit precedence.
-- Keep secrets out of logs.
-- Possibly use api.steamcmd.net instead of scraping steamcmd's output.
+**Not changed, so mention them to Ken rather than fixing them:**
+- **`--forcecfg` precedence:** the README says the command line wins unless `--forcecfg` is set. The code does the reverse: the config file wins unless `--forcecfg`.
+- **Seed restart timing:** the first-Thursday seed change restarts the server right after `quit`. That can interrupt steamcmd's update; it was the original design.
+- **`cd` doesn't change drive:** `startRust` uses `cd <launchdir>`, which doesn't switch drives. That's fine on this box, where RustyNail and the servers are both on D:.
+- **Boolean flags:** `-i`, `-j` and `-k` can only turn options on. Use the config file to turn them off.
+- **Relative steamcmd path:** `branchapi` runs `steam\steamcmd` relative to the current folder.
+- **Vulnerable dependencies:** `ws` and `nodemailer` have high-severity advisories. Upgrading needs Ken's yes; `nodemailer` is a major version.
 
-## Known bugs
-Pin each bug with a test before fixing it. Fix in this order: #1 (after the kill safety work), #2, #7/#10, #8, RCON hangs, then the rest.
-
+## Fixed bugs (for reference)
 1. `endTask` calls `cp.promises.exec`, which is undefined, so it never kills anything. A hung server stays up and a second copy gets launched.
 2. A failed Steam lookup leaves `steamBuildid` as `null`, which counts as an update and causes an endless announce-and-`quit` loop.
 3. `rustyconsole` ignores `-s`, `-p`, `-i`, `--json` and `-q`, and always connects to `127.0.0.1:28016`.
@@ -80,12 +72,9 @@ Pin each bug with a test before fixing it. Fix in this order: #1 (after the kill
 9. `setConfig` uses truthy checks: a blank password becomes `null`, the string `"false"` counts as true, and boolean flags can't turn anything off.
 10. Staging runs the old `isFirstThursday()` formula, which picks the wrong day. It's fixed on `development` in `e949109`.
 
-Risks found by reading the code:
-- **RCON hangs:** `sendCommand` has no close handler, and the `say`/`quit` calls have no timeout.
-- **`findTask` errors:** if `wmic` errors, the result is `[]`, which reads as "not running", so a second copy is launched.
-- **Seed restarts:** the `checkSeed` restart can kill steamcmd partway through an update.
-- **Password logging:** `printConfig` logs passwords.
-- **Relative paths:** `branchapi` runs `steam\steamcmd` and `del` relative to the current folder.
-- **Hostname parsing:** the `getInstance` regex misses an unquoted `server.hostname`.
-- **`--json` output:** it prints a Buffer under ws 8.
-- **Vulnerable dependencies:** `ws` (pinned as `>=3.3.1`) and `nodemailer` 6.9 have high-severity advisories.
+Also fixed:
+- **RCON hangs:** `sendCommand` had no close handler, and the `say`/`quit` calls had no timeout.
+- **`findTask` errors:** if `wmic` errored, the result was `[]`, which read as "not running".
+- **Password logging:** `printConfig` logged passwords.
+- **Hostname parsing:** the `getInstance` regex missed an unquoted `server.hostname`.
+- **`--json` output:** it printed a Buffer under ws 8.
