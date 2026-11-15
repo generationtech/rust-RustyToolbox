@@ -142,7 +142,7 @@ test('getInstance returns null without a launchfile', async () => {
   assert.strictEqual(await rustynail.getInstance(), null);
 });
 
-knownBug('hostname', 'getInstance reads an unquoted +server.hostname', async () => {
+test('hostname: getInstance reads an unquoted +server.hostname', async () => {
   const srv = makeServerDir({ batch: ['Server\\RustDedicated.exe -batchmode +server.hostname CoolGeeks +server.port 28015'] });
   try {
     Object.assign(rusty, { launchdir: srv.dir, launchfile: srv.launchfile });

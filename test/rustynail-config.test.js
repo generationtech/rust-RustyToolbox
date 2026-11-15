@@ -149,7 +149,7 @@ test('#9: a falsy command-line value (ticks 0) is kept instead of falling back t
   }
 });
 
-knownBug('secrets', 'printConfig does not log the RCON or email passwords', async (t) => {
+test('secrets: printConfig does not log the RCON or email passwords', async (t) => {
   await load(t, { config: { password: 'RconSecret123', empass: 'MailSecret456' } });
   const lines = captureConsole(t);
   rustynail.printConfig();
@@ -187,4 +187,13 @@ test('#5: a config file that appears later is picked up', async (t) => {
   require('fs').copyFileSync(srv.config, later);
   await rustynail.checkConfig(later);
   assert.strictEqual(rusty.timer, 4321);
+});
+
+test('secrets: printConfig shows other settings and marks passwords as set', async (t) => {
+  await load(t, { config: { password: 'RconSecret123', empass: 'MailSecret456', timer: 2468 } });
+  const lines = captureConsole(t);
+  rustynail.printConfig();
+  assert.ok(lines.includes('rusty.timer: 2468'));
+  assert.ok(lines.includes('rusty.rcon.password: ********'));
+  assert.ok(lines.includes('rusty.empass: ********'));
 });

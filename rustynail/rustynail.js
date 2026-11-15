@@ -409,6 +409,8 @@ function setConfig(jsonConfig, rustyVar, configKey) {
 //
 //
 
+const secretKeys = ['password', 'empass'];
+
 function printConfig() {
   console.log(); // Print an empty line for spacing
   
@@ -419,6 +421,8 @@ function printConfig() {
           if (typeof obj[key] === 'object' && obj[key] !== null) {
               // Recursive call for nested objects
               printProperties(obj[key], `${prefix}${key}.`);
+          } else if (secretKeys.includes(key) && obj[key]) {
+              console.log(`${prefix}${key}: ********`);   // never log passwords
           } else {
               console.log(`${prefix}${key}: ${obj[key]}`);
           }
@@ -513,8 +517,9 @@ async function getInstance() {
     const data = await fsp.readFile(filePath, 'utf8');
 
     // Use a regular expression to extract the instance name directly.
-    const match = data.match(/server\.hostname\s+"([^"]+)"/i);
-    return match ? match[1].trim() : null;
+    // The hostname may be quoted (+server.hostname "My Server") or a single word (+server.hostname MyServer).
+    const match = data.match(/server\.hostname\s+(?:"([^"]+)"|([^\s"]+))/i);
+    return match ? (match[1] ?? match[2]).trim() : null;
   } catch (error) {
     console.error(`Error retrieving instance name: ${error}`);
     return null; // Return null in case of any error.
