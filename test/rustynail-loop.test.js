@@ -190,14 +190,14 @@ test('#2: after a good lookup, a later failed lookup keeps the last known Steam 
   assert.strictEqual(rusty.operation, states.RUNNING);
 });
 
-knownBug('#8', 'without unavail/failsafe configured, one missed check does not restart the server', async (t) => {
+test('#8: without unavail/failsafe configured, one missed check does not restart the server', async (t) => {
   const w = setUp(t, { omit: ['unavail', 'failsafe'] });
   w.online = false;
   await w.tick();
   assert.strictEqual(w.starts(), 0);
 });
 
-knownBug('#8', 'without unavail configured, "back online" is not logged on every check', async (t) => {
+test('#8: without unavail configured, "back online" is not logged on every check', async (t) => {
   const w = setUp(t, { omit: ['unavail', 'failsafe'] });
   await w.tick();
   await w.tick();

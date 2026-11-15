@@ -96,27 +96,40 @@ knownBug('#5', 'a missing config file does not crash checkConfig', async (t) => 
   await assert.doesNotReject(rustynail.checkConfig('Z:\\no\\such\\rustytoolbox.json'));
 });
 
-knownBug('#8', 'unavail defaults to a positive number when not configured', async (t) => {
+test('#8: unavail defaults to a positive number when not configured', async (t) => {
   await load(t, { omit: ['unavail', 'failsafe'] });
   assert.ok(rusty.unavail > 0, `unavail is ${rusty.unavail}`);
 });
 
-knownBug('#8', 'failsafe defaults to a positive number when not configured', async (t) => {
+test('#8: failsafe defaults to a positive number when not configured', async (t) => {
   await load(t, { omit: ['unavail', 'failsafe'] });
   assert.ok(rusty.failsafe > 0, `failsafe is ${rusty.failsafe}`);
 });
 
-knownBug('#9', 'an unset password stays an empty string, not null', async (t) => {
+test('#9: an unset password stays an empty string, not null', async (t) => {
   await load(t, { omit: ['password'] });
   assert.strictEqual(rusty.rcon.password, '');
 });
 
-knownBug('#9', 'the string "false" in the config turns an option off', async (t) => {
+test('#9: the string "false" in the config turns an option off', async (t) => {
   await load(t, { config: { emupdate: 'false', emunavail: 'false' } });
   assert.strictEqual(rusty.emupdate, false);
 });
 
-knownBug('#9', 'a command-line false for autostart is respected', async (t) => {
+test('#9: the strings "true"/"TRUE" turn an option on; real booleans pass through', async (t) => {
+  await load(t, { config: { emupdate: 'true', emunavail: 'TRUE', autofail: false, autostart: true } });
+  assert.strictEqual(rusty.emupdate, true);
+  assert.strictEqual(rusty.emunavail, true);
+  assert.strictEqual(rusty.autofail, false);
+  assert.strictEqual(rusty.autostart, true);
+});
+
+test('#9: non-boolean options keep the strings "true"/"false" as text', async (t) => {
+  await load(t, { config: { announce: 'false' } });
+  assert.strictEqual(rusty.announce, 'false');
+});
+
+test('#9: a command-line false for autostart is respected', async (t) => {
   program.autostart = false;
   try {
     await load(t, { omit: ['autostart'] });
@@ -126,7 +139,7 @@ knownBug('#9', 'a command-line false for autostart is respected', async (t) => {
   }
 });
 
-knownBug('#9', 'a falsy command-line value (ticks 0) is kept instead of falling back to the default', async (t) => {
+test('#9: a falsy command-line value (ticks 0) is kept instead of falling back to the default', async (t) => {
   program.ticks = 0;
   try {
     await load(t, { omit: ['ticks'] });

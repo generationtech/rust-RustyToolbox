@@ -50,6 +50,8 @@ const defaults = {
   autoupdate: true,
   timer: 60000,
   timeout: 2000,
+  unavail: 10,
+  failsafe: 5,
   announce: 'Update released by Facepunch, server rebooting to update',
   ticks: 5,
 };
@@ -368,19 +370,29 @@ async function checkConfig(file) {
 }
 
 // Chatgpt could not refactor this into functional code. FAIL
+const booleanKeys = ['autostart', 'autofail', 'autoupdate', 'emupdate', 'emunavail'];
+
 function setConfig(jsonConfig, rustyVar, configKey) {
 //  Decision tree to set a sigle config value from
 //  either command-line, config file, or defaults,
 //  otherwise set to null for novel vars.
+//  "Set" means present, so false, 0 and '' are kept rather than skipped.
+  let value;
   if (jsonConfig.hasOwnProperty(configKey) && !program.forcecfg) {
-    rustyVar[configKey] = jsonConfig[configKey];
-  } else if (program[configKey]) {
-    rustyVar[configKey] = program[configKey];
-  } else if (defaults[configKey]) {
-    rustyVar[configKey] = defaults[configKey];
+    value = jsonConfig[configKey];
+  } else if (program[configKey] !== undefined) {
+    value = program[configKey];
+  } else if (defaults[configKey] !== undefined) {
+    value = defaults[configKey];
   } else {
-    rustyVar[configKey] = null;
+    value = null;
   }
+  //  The documented config example uses "true"/"false" strings for on/off options
+  if (booleanKeys.includes(configKey) && typeof value === 'string') {
+    if (value.trim().toLowerCase() === 'false') value = false;
+    else if (value.trim().toLowerCase() === 'true') value = true;
+  }
+  rustyVar[configKey] = value;
 }
 //
 //
