@@ -4,7 +4,10 @@
   "description": "command line version of Rust web rcon",
   "main": "rustyconsole.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "bin": {
     "rustyconsole": "./rustyconsole/rustyconsole.js",

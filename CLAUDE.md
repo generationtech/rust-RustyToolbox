@@ -32,9 +32,16 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 
 `.claude/settings.json` backs these rules with deny rules. Those rules match command text, so they're a safety net, not a guarantee.
 
-## Running
-- Install: `npm ci`
-- Tests: `npm test`, using `node:test` (the harness is being added in phase 0)
+## Running and testing
+- **Install:** `npm ci`
+- **Tests:** `npm test` runs `node --test test/*.test.js` in about 3 seconds. CI (`.github/workflows/test.yml`) runs it on Ubuntu and Windows.
+- **Every test file must `require('./helpers/sandbox')` first.** The sandbox fakes `child_process.exec` (tests install canned output with `setExecHandler`) and blocks every other `child_process` function and `process.kill`. It also blocks all network connections except to loopback ports registered by a test fake. The only real child process tests may start is `node` itself, through `sandbox.runNode()`.
+- **Test helpers in `test/helpers/`:**
+  - `fake-rcon.js`: a fake WebRCON server.
+  - `fake-ws-preload.js`: a fake `ws` for CLI subprocess tests.
+  - `fixtures.js`: temp server folders, `rusty` state reset, console capture.
+- **`knownBug(id, name, fn)`** (in `known-bug.js`): `fn` asserts the *correct* behavior. The test passes while the bug exists and fails with "looks fixed" once it's fixed. When you fix a bug, change its `knownBug(...)` to `test(...)`.
+- **`rustynail.js` exports its functions.** Its main loop body is `tick(loop)`, and it only parses arguments and runs `main()` when executed directly. Tests drive it one `tick()` at a time, mocking `consoleapi.sendCommand`, `branchapi.getBuildID` and `sys.sleep`.
 
 ## Known bugs
 Pin each bug with a test before fixing it. Fix in this order: #1 (after the kill safety work), #2, #7/#10, #8, RCON hangs, then the rest.
