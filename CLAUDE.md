@@ -43,6 +43,29 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 - **`knownBug(id, name, fn)`** (in `known-bug.js`): `fn` asserts the *correct* behavior. The test passes while the bug exists and fails with "looks fixed" once it's fixed. When you fix a bug, change its `knownBug(...)` to `test(...)`.
 - **`rustynail.js` exports its functions.** Its main loop body is `tick(loop)`, and it only parses arguments and runs `main()` when executed directly. Tests drive it one `tick()` at a time, mocking `consoleapi.sendCommand`, `branchapi.getBuildID` and `sys.sleep`.
 
+## Roadmap
+Stop and report to Ken after each step.
+
+**Phase 0 (branch `modernize/phase-0`)**
+1. Done: reconnaissance.
+2. Done: toolchain.
+3. Done: guardrails.
+4. Done: test harness.
+5. **Kill-path safety, before any bug fix:**
+   - Config validation: refuse to run if `launchdir`, `launchfile` or `launchexec` is missing, doesn't exist, is too broad, or is inside `RustAdminRelease`.
+   - Dry-run mode (a command-line flag and a config key): log the PIDs and command lines that `endTask` would kill, without killing them.
+   - Pre-kill check: only kill `cmd.exe` running the configured batch file, or the configured `RustDedicated.exe` path.
+   - Tests for all of the above. Then, with Ken, run the dry-run against one real server and show Ken the output.
+
+**After phase 0**
+- Fix the bugs one at a time (a failing test, then a small commit).
+- Upgrade the dependencies (`ws`, `nodemailer`, `commander`).
+- Replace WMIC with `Get-CimInstance`.
+- Rewrite the RCON client with Identifier matching, timeouts and close handling.
+- Add a config schema with explicit precedence.
+- Keep secrets out of logs.
+- Possibly use api.steamcmd.net instead of scraping steamcmd's output.
+
 ## Known bugs
 Pin each bug with a test before fixing it. Fix in this order: #1 (after the kill safety work), #2, #7/#10, #8, RCON hangs, then the rest.
 
