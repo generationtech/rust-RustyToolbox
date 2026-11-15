@@ -248,12 +248,13 @@ async function tick(loop) {
           rusty.operation = states.REBOOT;
           loop.unavail = 0;
           let retval = await consoleapi.sendCommand(rusty.rcon);
-          //  Get new seed 1st update-caused reboot of every 1st Thursday of the month
-          if (isFirstThursday()) {
-            checkSeed();
-          }
         } catch(e) {
+          //  The server may drop the connection as it quits, without replying
           console.log('console command returned error: ' + e)
+        }
+        //  Get new seed 1st update-caused reboot of every 1st Thursday of the month
+        if (isFirstThursday()) {
+          checkSeed();
         }
       }
 

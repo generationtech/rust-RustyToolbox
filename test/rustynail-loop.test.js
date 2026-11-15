@@ -203,3 +203,35 @@ test('#8: without unavail configured, "back online" is not logged on every check
   await w.tick();
   assert.strictEqual(w.logs.filter((l) => /back online after being unresponsive/.test(l)).length, 0);
 });
+
+test('RCON hang: a quit that gets no reply still moves on to REBOOT monitoring', async (t) => {
+  const w = setUp(t, { config: { ticks: 0 } });
+  w.steam = '101';
+  t.mock.method(consoleapi, 'sendCommand', async (rcon) => {
+    w.rcon.push(rcon.command);
+    if (rcon.command === 'quit') throw new Error('RCON connection closed before a reply was received');
+    return { result: 'ok', error: null };
+  });
+  await w.tick();
+  assert.strictEqual(rusty.operation, states.REBOOT);
+  await w.tick();
+  assert.deepStrictEqual(w.rcon, ['version', 'quit', 'version']);
+});
+
+test('RCON hang: on a first Thursday the seed still changes when quit gets no reply', async (t) => {
+  const w = setUp(t, { config: { ticks: 0, seedDate: new Date(2026, 10, 5).toISOString() } });
+  t.mock.timers.setTime(new Date(2026, 11, 3, 10, 30).getTime());   // first Thursday
+  w.steam = '101';
+  t.mock.method(consoleapi, 'sendCommand', async (rcon) => {
+    if (rcon.command === 'quit') throw new Error('RCON connection closed before a reply was received');
+    return { result: 'ok', error: null };
+  });
+  await w.tick();
+  // checkSeed runs without being awaited; wait up to 2 s for it to write the config.
+  const want = new Date(2026, 11, 3).getTime();
+  const savedSeedDate = () => { try { return new Date(srv.readConfig().seedDate).getTime(); } catch { return null; } };
+  for (let i = 0; i < 200 && savedSeedDate() !== want; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.strictEqual(savedSeedDate(), want);
+  // Let the rest of checkSeed (batch file, restart) finish before the fixture is removed.
+  await new Promise((r) => setTimeout(r, 100));
+});

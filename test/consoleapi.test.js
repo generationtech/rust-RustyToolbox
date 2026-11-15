@@ -46,28 +46,55 @@ test('a connection error rejects', async (t) => {
   await assert.rejects(consoleapi.sendCommand({ server: '127.0.0.1:9', password: 'x', command: 'version', id: 1 }));
 });
 
-knownBug('#4', 'returns the reply with the matching Identifier, not an earlier broadcast', async (t) => {
+test('#4: returns the reply with the matching Identifier, not an earlier broadcast', async (t) => {
   const fake = await startFakeRcon({ broadcastFirst: 'some unrelated server log line' });
   t.after(() => fake.close());
   const result = await consoleapi.sendCommand(rcon(fake, { command: 'version' }));
   assert.strictEqual(result.result, 'echo: version');
 });
 
-knownBug('RCON-hang', 'rejects when the server closes the connection without replying', async (t) => {
+test('RCON hang: rejects when the server closes the connection without replying', async (t) => {
   const fake = await startFakeRcon({ closeWithoutReply: true });
   t.after(() => fake.close());
   const outcome = await within(consoleapi.sendCommand(rcon(fake)).then(() => 'RESOLVED', () => 'REJECTED'), 1500);
   assert.strictEqual(outcome, 'REJECTED');
 });
 
-knownBug('RCON-hang', 'gives up when the server never replies', async (t) => {
+test('RCON hang: gives up when the server never replies (rcon.timeout)', async (t) => {
   const fake = await startFakeRcon({ silent: true });
   t.after(() => fake.close());
-  const outcome = await within(consoleapi.sendCommand(rcon(fake)).then(() => 'RESOLVED', () => 'REJECTED'), 1500);
-  assert.notStrictEqual(outcome, 'TIMEOUT');
+  const started = Date.now();
+  await assert.rejects(within(consoleapi.sendCommand(rcon(fake, { timeout: 300 })), 1500), /No RCON reply within 300 ms/);
+  assert.ok(Date.now() - started < 1500);
 });
 
-knownBug('json-buffer', 'json mode returns text, not a Buffer (ws 8 delivers Buffers)', async (t) => {
+test('RCON hang: without rcon.timeout the default wait is 10 seconds', async (t) => {
+  const fake = await startFakeRcon({ silent: true });
+  t.after(() => fake.close());
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = consoleapi.sendCommand(rcon(fake));
+  const outcome = pending.then(() => 'RESOLVED', (e) => e.message);
+  t.mock.timers.tick(9999);
+  await new Promise((r) => setImmediate(r));
+  t.mock.timers.tick(1);
+  assert.strictEqual(await outcome, 'No RCON reply within 10000 ms');
+});
+
+test('#4: a broadcast with another Identifier that arrives first is ignored, also with --json', async (t) => {
+  const fake = await startFakeRcon({ broadcastFirst: 'unrelated log line' });
+  t.after(() => fake.close());
+  const result = await consoleapi.sendCommand(rcon(fake, { json: true, id: 5 }));
+  assert.deepStrictEqual(JSON.parse(result.result), { Message: 'echo: version', Identifier: 5, Type: 'Generic' });
+});
+
+test('a slow reply within the timeout is still accepted', async (t) => {
+  const fake = await startFakeRcon({ delayMs: 200 });
+  t.after(() => fake.close());
+  const result = await consoleapi.sendCommand(rcon(fake, { timeout: 2000 }));
+  assert.strictEqual(result.result, 'echo: version');
+});
+
+test('json: json mode returns text, not a Buffer (ws 8 delivers Buffers)', async (t) => {
   const fake = await startFakeRcon();
   t.after(() => fake.close());
   const result = await consoleapi.sendCommand(rcon(fake, { json: true }));
