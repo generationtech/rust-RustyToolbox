@@ -120,7 +120,7 @@ program
   .option('-v, --empass <password>', 'email user password')
   .option('-w, --emupdate', 'enable sending email for updates')
   .option('-x, --emunavail', 'enable sending email for unavailability')
-  .option('-f, --forcecfg', 'config file overrides command-line options');
+  .option('--forcecfg', 'config file overrides command-line options');   // no short flag: -f is --failsafe
 
 // Indirection so tests can replace sleeps without waiting in real time.
 const sys = {
@@ -130,7 +130,10 @@ const sys = {
 // Parse command-line options and assign them to the `rusty` object
 function applyCliOptions(argv) {
   program.parse(argv);
-  Object.assign(rusty, program.opts());
+  //  Copy only options that have a value, so an omitted -c keeps the default config path
+  for (const [key, value] of Object.entries(program.opts())) {
+    if (value !== undefined) rusty[key] = value;
+  }
 }
 
 // State carried between main loop iterations
@@ -327,10 +330,18 @@ async function checkConfig(file) {
 //  Loads all the script configuration values from either
 //  command-line options, configuration file, or program defaults.
 //  Check config file date/time and reload if the file is updated.
-  var stats = fs.statSync(file)
-  if (stats.mtime.getTime() != rusty.configDate.getTime()) {
+//  The config file is optional: without one, command-line options and defaults are used.
+  var stats = null;
+  try {
+    stats = fs.statSync(file);
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  var mtime = stats ? stats.mtime : new Date(0);
+  if (mtime.getTime() != rusty.configDate.getTime()) {
     try {
-      var jsonConfig = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (!stats) console.log(`Config file ${file} not found, using command-line options and defaults`);
+      var jsonConfig = stats ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 
       //  Handle standard (easy) config options
       setConfig(jsonConfig, rusty, "manifest");
@@ -359,7 +370,7 @@ async function checkConfig(file) {
 
       rusty.instance   = await getInstance();
       rusty.eminstance = rusty.instance ? rusty.instance + ": " : "Server ";
-      rusty.configDate = stats.mtime;
+      rusty.configDate = mtime;
 
       printConfig();
 

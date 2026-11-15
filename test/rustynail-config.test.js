@@ -91,7 +91,7 @@ test('a malformed config file is logged and ignored', async (t) => {
   assert.ok(lines.some((l) => /JSON/.test(l)));
 });
 
-knownBug('#5', 'a missing config file does not crash checkConfig', async (t) => {
+test('#5: a missing config file does not crash checkConfig', async (t) => {
   captureConsole(t);
   await assert.doesNotReject(rustynail.checkConfig('Z:\\no\\such\\rustytoolbox.json'));
 });
@@ -156,4 +156,35 @@ knownBug('secrets', 'printConfig does not log the RCON or email passwords', asyn
   const out = lines.join('\n');
   assert.ok(!out.includes('RconSecret123'), 'RCON password was logged');
   assert.ok(!out.includes('MailSecret456'), 'email password was logged');
+});
+
+test('#5: without a config file, command-line values and defaults are loaded once', async (t) => {
+  const lines = captureConsole(t);
+  const missing = require('path').join(require('os').tmpdir(), `no-such-rustytoolbox-${process.pid}.json`);
+  program.timer = 5000;
+  try {
+    rusty.config = missing;
+    rusty.configDate = new Date();                 // as at startup
+    await rustynail.checkConfig(missing);
+    assert.strictEqual(rusty.timer, 5000);
+    assert.strictEqual(rusty.unavail, 10);
+    assert.strictEqual(rusty.rcon.server, '127.0.0.1:28016');
+    assert.ok(lines.some((l) => /not found, using command-line options and defaults/.test(l)));
+    rusty.timer = 1;
+    await rustynail.checkConfig(missing);
+    assert.strictEqual(rusty.timer, 1, 'should not reload while the file is still missing');
+  } finally {
+    program.timer = 60000;
+  }
+});
+
+test('#5: a config file that appears later is picked up', async (t) => {
+  captureConsole(t);
+  srv = makeServerDir({ config: { timer: 4321 } });
+  const later = srv.config + '.later';
+  rusty.configDate = new Date();
+  await rustynail.checkConfig(later);              // missing: defaults
+  require('fs').copyFileSync(srv.config, later);
+  await rustynail.checkConfig(later);
+  assert.strictEqual(rusty.timer, 4321);
 });

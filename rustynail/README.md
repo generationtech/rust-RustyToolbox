@@ -29,7 +29,7 @@ Options:
   -v, --empass <password>       email user password
   -w, --emupdate                enable sending email for updates
   -x, --emunavail               enable sending email for unavailability
-  -f, --forcecfg                config file overrides command-line options
+      --forcecfg                config file overrides command-line options
   -h, --help                    output usage information
 ```
 

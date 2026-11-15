@@ -11,13 +11,13 @@ const { knownBug } = require('./helpers/known-bug');
 
 const { rusty, program } = rustynail;
 
-knownBug('#6', 'every option has a unique short flag (-f is used by --failsafe and --forcecfg)', () => {
+test('#6: every option has a unique short flag (-f is used by --failsafe and --forcecfg)', () => {
   const shorts = program.options.map((o) => o.short).filter(Boolean);
   const dupes = shorts.filter((s, i) => shorts.indexOf(s) !== i);
   assert.deepStrictEqual(dupes, []);
 });
 
-knownBug('#5', 'without -c the config path is the default rustytoolbox.json', () => {
+test('#5: without -c the config path is the default rustytoolbox.json', () => {
   rustynail.applyCliOptions(['node', 'rustynail.js']);
   assert.strictEqual(rusty.config, 'rustytoolbox.json');
 });
@@ -30,8 +30,14 @@ test('-c and value options are copied onto rusty (values stay strings)', () => {
   assert.strictEqual(rusty.launchfile, 'go.bat');
 });
 
-test('-f sets failsafe (the first -f defined wins)', () => {
+test('-f sets failsafe and does not touch forcecfg', () => {
   rustynail.applyCliOptions(['node', 'rustynail.js', '-f', '3']);
   assert.strictEqual(rusty.failsafe, '3');
   assert.strictEqual(program.forcecfg, undefined);
+});
+
+test('#6: --forcecfg still works as a long option', () => {
+  rustynail.applyCliOptions(['node', 'rustynail.js', '--forcecfg']);
+  assert.strictEqual(program.forcecfg, true);
+  delete program.forcecfg;
 });
