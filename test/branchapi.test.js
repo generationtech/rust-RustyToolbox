@@ -79,6 +79,52 @@ test('throws when the branch does not exist', async (t) => {
   await assert.rejects(branchapi.getBuildID('258550', 'nosuchbranch'), /Build ID not found/);
 });
 
+// A steamcmd that never answers until the test lets it finish.
+function steamcmdHangs() {
+  let finish;
+  const stalled = new Promise((resolve) => { finish = () => resolve({ stdout: appInfo }); });
+  sandbox.setExecHandler((cmd) => (cmd.startsWith('del ') ? {} : stalled));
+  // Let it exit, then give branchapi a turn of the event loop to notice.
+  return async () => { finish(); await stalled; await new Promise((r) => setImmediate(r)); };
+}
+const steamcmdRuns = () => sandbox.execCalls.filter((c) => c.startsWith('steam\\steamcmd')).length;
+
+test('a stalled steamcmd gives up after the timeout instead of waiting forever', async (t) => {
+  captureConsole(t);
+  const finish = steamcmdHangs();
+  t.after(finish);
+  const started = Date.now();
+  await assert.rejects(branchapi.getBuildID('258550', 'public', 50), /steamcmd gave no answer within 0.05 s/);
+  assert.ok(Date.now() - started < 2000);
+});
+
+test('no second steamcmd starts while a stalled one is still running', async (t) => {
+  captureConsole(t);
+  const finish = steamcmdHangs();
+  await assert.rejects(branchapi.getBuildID('258550', 'public', 50), /no answer/);
+  await assert.rejects(branchapi.getBuildID('258550', 'public', 50), /previous steamcmd lookup is still running/);
+  assert.strictEqual(steamcmdRuns(), 1);
+
+  await finish();                                   // the stalled steamcmd finally exits
+  steamcmdReturns(appInfo);
+  assert.strictEqual(await branchapi.getBuildID('258550', 'public', 50), '123');
+  assert.strictEqual(steamcmdRuns(), 2);
+});
+
+test('the default timeout is 5 minutes', async (t) => {
+  steamcmdReturns(appInfo);
+  const delays = [];
+  const realSetTimeout = setTimeout;
+  const stub = t.mock.method(globalThis, 'setTimeout', (fn, ms, ...rest) => {
+    delays.push(ms);
+    return realSetTimeout(fn, ms, ...rest);
+  });
+  const pending = branchapi.getBuildID('258550', 'public');
+  stub.mock.restore();
+  assert.strictEqual(await pending, '123');
+  assert.ok(delays.includes(5 * 60 * 1000), `setTimeout delays: ${delays}`);
+});
+
 test('throws when steamcmd itself fails', async (t) => {
   captureConsole(t);
   sandbox.setExecHandler((cmd) => {
