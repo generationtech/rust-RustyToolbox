@@ -27,14 +27,14 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 5. **Never point a dev RustyNail or rustyconsole at a live server** unless Ken has stopped that server's live RustyNail.
 6. **Tests must never kill real processes or run real steamcmd.** Use the fake WebRCON server and stub `child_process`.
 7. **The kill logic is dangerous.** `findTask` builds WMI `LIKE '%…%'` patterns from `launchdir`, `launchfile` and `launchexec`, and `endTask` runs `taskkill /t /f` on every match. An empty or broad value could match every process on the box. Don't make `endTask` work (bug #1) until path validation, a refusal for any `RustAdminRelease` path, and a dry-run mode exist and are tested.
-8. **Commits:** commit each fix to `development` as you go, without asking. Ken pushes with GitHub Desktop; `git push` from this shell hangs on a GitHub sign-in prompt. Merging into `master` and deploying to the live server folders need Ken's yes.
+8. **Git:** Claude does all git operations. Ken steps in only for what Claude can't do, such as GitHub settings or keys. Commit each fix to `development` and push it, without asking. `origin` uses SSH (`git@github.com:generationtech/rust-RustyToolbox.git`) with a write-enabled deploy key for this repo only, at `C:\Users\Administrator\.ssh\id_ed25519`. Ken's yes is needed for merging into `main`, force-pushing or rewriting pushed history, and deploying to the live server folders.
 9. **Redact RCON and email passwords** in anything you print or summarize.
 
 `.claude/settings.json` backs these rules with deny rules. Those rules match command text, so they're a safety net, not a guarantee.
 
 ## Running and testing
 - **Install:** `npm ci`
-- **Tests:** `npm test` runs `node --test test/*.test.js` in about 3 seconds. CI (`.github/workflows/test.yml`) runs it on Ubuntu and Windows.
+- **Tests:** `npm test` runs `node --test test/*.test.js` in about 30 seconds; nearly all of that is `test/consoleapi.test.js` waiting out ws's 30-second close timeout (true before the ws upgrade too). CI (`.github/workflows/test.yml`) runs it on Ubuntu and Windows.
 - **Every test file must `require('./helpers/sandbox')` first.** The sandbox fakes `child_process.exec` (tests install canned output with `setExecHandler`) and blocks every other `child_process` function and `process.kill`. It also blocks all network connections except to loopback ports registered by a test fake. The only real child process tests may start is `node` itself, through `sandbox.runNode()`.
 - **Test helpers in `test/helpers/`:**
   - `fake-rcon.js`: a fake WebRCON server.
@@ -46,12 +46,13 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 ## Scope
 **Ken's direction (2026-11-14): fix RustyNail's identified bugs, and protect the rest of the Windows server. No new features.** Ask Ken before anything beyond a bug fix: dependency upgrades, rewrites (WMIC, RCON client, config schema), new options or modes.
 
-## Status (merged to `master` and `development`; staging deployed 2026-11-14, vanilla not yet)
+## Status (merged to `main` and `development`; staging deployed 2026-11-14, vanilla not yet)
 Each fix has its own commit and tests:
 - **Fixed:** #1 to #9, the RCON hangs, `findTask` errors, password logging, hostname parsing and `--json` output.
 - **Main loop freeze after RustyNail starts the server (found on staging):** `startRust` awaited `exec('start ...')`, which waits until the server exits. It now launches with `spawn` and `stdio: 'ignore'` (`sys.launch`). Never launch long-running programs with `exec`.
 - **Verified by Ken on staging:** periodic version checks, starting the server when it isn't running at startup, and restarting it when it stops.
 - **#10:** already fixed on `development`. Staging gets it when it's deployed.
+- **Dependency security upgrades (Ken approved 2026-11-15, merged to `main`, not yet deployed):** `ws` 8.16.0 → 8.23.0 and `nodemailer` 6.9.13 → 10.5.0. `npm audit` is clean. `test/rustynail-email.test.js` covers email alerts without touching the network. Live installs need `npm ci` after pulling.
 - **#1 safety:** before RustyNail looks up, kills or starts anything, `launchConfigProblem()` must accept the launch settings. The process query matches only this server's launcher `cmd.exe` and its exact `RustDedicated.exe` path. RustyNail's own PIDs are never killed, and the server starts only once the old processes are confirmed gone. This was checked on the host with dummy processes, and both live configs pass the validation.
 
 **Not changed, so mention them to Ken rather than fixing them:**
@@ -60,8 +61,6 @@ Each fix has its own commit and tests:
 - **`cd` doesn't change drive:** `startRust` uses `cd <launchdir>`, which doesn't switch drives. That's fine on this box, where RustyNail and the servers are both on D:.
 - **Boolean flags:** `-i`, `-j` and `-k` can only turn options on. Use the config file to turn them off.
 - **Relative steamcmd path:** `branchapi` runs `steam\steamcmd` relative to the current folder.
-- **Vulnerable dependencies:** `ws` and `nodemailer` have high-severity advisories. Upgrading needs Ken's yes; `nodemailer` is a major version.
-
 ## Fixed bugs (for reference)
 1. `endTask` calls `cp.promises.exec`, which is undefined, so it never kills anything. A hung server stays up and a second copy gets launched.
 2. A failed Steam lookup leaves `steamBuildid` as `null`, which counts as an update and causes an endless announce-and-`quit` loop.
