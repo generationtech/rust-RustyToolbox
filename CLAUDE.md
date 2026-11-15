@@ -27,7 +27,7 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 5. **Never point a dev RustyNail or rustyconsole at a live server** unless Ken has stopped that server's live RustyNail.
 6. **Tests must never kill real processes or run real steamcmd.** Use the fake WebRCON server and stub `child_process`.
 7. **The kill logic is dangerous.** `findTask` builds WMI `LIKE '%…%'` patterns from `launchdir`, `launchfile` and `launchexec`, and `endTask` runs `taskkill /t /f` on every match. An empty or broad value could match every process on the box. Don't make `endTask` work (bug #1) until path validation, a refusal for any `RustAdminRelease` path, and a dry-run mode exist and are tested.
-8. **Commits:** commit each fix to `development` as you go, without asking. Ken pushes with GitHub Desktop; `git push` from this shell hangs on a GitHub sign-in prompt. Merging into `master` and deploying to the live server folders need Ken's yes.
+8. **Commits:** commit each fix to `development` as you go, without asking. Ken pushes with GitHub Desktop; `git push` from this shell hangs on a GitHub sign-in prompt. Merging into `main` and deploying to the live server folders need Ken's yes.
 9. **Redact RCON and email passwords** in anything you print or summarize.
 
 `.claude/settings.json` backs these rules with deny rules. Those rules match command text, so they're a safety net, not a guarantee.
@@ -46,7 +46,7 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 ## Scope
 **Ken's direction (2026-11-14): fix RustyNail's identified bugs, and protect the rest of the Windows server. No new features.** Ask Ken before anything beyond a bug fix: dependency upgrades, rewrites (WMIC, RCON client, config schema), new options or modes.
 
-## Status (merged to `master` and `development`; staging deployed 2026-11-14, vanilla not yet)
+## Status (merged to `main` and `development`; staging deployed 2026-11-14, vanilla not yet)
 Each fix has its own commit and tests:
 - **Fixed:** #1 to #9, the RCON hangs, `findTask` errors, password logging, hostname parsing and `--json` output.
 - **Main loop freeze after RustyNail starts the server (found on staging):** `startRust` awaited `exec('start ...')`, which waits until the server exits. It now launches with `spawn` and `stdio: 'ignore'` (`sys.launch`). Never launch long-running programs with `exec`.
