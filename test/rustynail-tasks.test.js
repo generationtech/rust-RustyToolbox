@@ -75,12 +75,15 @@ test('findTask() also matches the exact RustDedicated.exe path (exact query)', a
   ]);
 });
 
-test('findTask ignores a trailing backslash on launchdir', async () => {
+test('findTask ignores a trailing separator on launchdir (same query as without it)', async () => {
   configure();
-  rusty.launchdir = srv.dir + '\\';
   fakeSystem([]);
   await rustynail.findTask();
-  assert.ok(!sandbox.execCalls[0].includes(`${wql(srv.dir)}\\\\\\\\`));
+  const withoutSeparator = sandbox.execCalls[0];
+  sandbox.execCalls.length = 0;
+  rusty.launchdir = srv.dir + path.sep;     // a backslash on Windows; on Linux a backslash is a filename character
+  await rustynail.findTask();
+  assert.strictEqual(sandbox.execCalls[0], withoutSeparator);
 });
 
 test('findTask parses PIDs from real wmic output', async () => {
