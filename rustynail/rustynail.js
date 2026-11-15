@@ -124,6 +124,14 @@ program
 // Indirection so tests can replace sleeps without waiting in real time.
 const sys = {
   sleep: (ms) => new Promise((resolve, reject) => setTimeout(() => resolve(), ms)),
+  // Runs a shell command that starts a long-running program (via "start") and returns once the
+  // shell itself exits. Unlike exec, it doesn't connect the program to RustyNail's output pipes,
+  // so it doesn't wait for the program to finish (which for a Rust server is never).
+  launch: (command) => new Promise((resolve, reject) => {
+    const child = require('child_process').spawn(command, { shell: true, stdio: 'ignore' });
+    child.on('error', reject);
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`"${command}" exited with code ${code}`))));
+  }),
 };
 
 // Parse command-line options and assign them to the `rusty` object
@@ -621,9 +629,8 @@ async function startRust() {
     return false;
   }
   try {
-    const { stdout, stderr } = await cpExec(`start cmd /c "cd ${rusty.launchdir} && ${rusty.launchfile}"`);
-    if (stdout) console.log(stdout);
-    if (stderr) console.error(stderr);
+    //  Not exec: exec would wait until the server exits, freezing RustyNail's main loop
+    await sys.launch(`start cmd /c "cd ${rusty.launchdir} && ${rusty.launchfile}"`);
     return true;
   } catch (error) {
     console.error('Failed to start Rust:', error);

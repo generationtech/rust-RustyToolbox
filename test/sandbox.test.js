@@ -54,3 +54,15 @@ test('runNode can run node itself', async () => {
   assert.strictEqual(r.code, 0);
   assert.strictEqual(r.stdout.trim(), '42');
 });
+
+test('spawn with shell: true is faked (recorded, never run); other spawn forms are refused', async () => {
+  sandbox.reset();
+  sandbox.setExecHandler(() => ({}));
+  const child = cp.spawn('start cmd /c "echo hi"', { shell: true, stdio: 'ignore' });
+  const [code] = await new Promise((r) => child.on('exit', (...a) => r(a)));
+  assert.strictEqual(code, 0);
+  assert.deepStrictEqual(sandbox.execCalls, ['start cmd /c "echo hi"']);
+  assert.throws(() => cp.spawn('cmd.exe', ['/c', 'echo hi']), sandbox.SandboxError);
+  assert.throws(() => cp.spawn('cmd.exe /c echo hi', { shell: false }), sandbox.SandboxError);
+  sandbox.reset();
+});

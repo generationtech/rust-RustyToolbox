@@ -61,8 +61,25 @@ function blocked(name) {
   };
 }
 
+// spawn(command, { shell: true }) is faked like exec: recorded, answered by the exec handler,
+// and reported back with an 'exit' event (code 0, or 1 if the handler throws). Its options are
+// kept in spawnOptions. Every other form of spawn is refused.
+const spawnOptions = [];
+function fakeSpawn(command, args, options) {
+  if (!Array.isArray(args)) { options = args; args = []; }
+  if (!options || options.shell !== true || args.length) {
+    throw new SandboxError(`blocked child_process.spawn(${JSON.stringify(command)})`);
+  }
+  spawnOptions.push({ command, ...options });
+  const { EventEmitter } = require('events');
+  const child = new EventEmitter();
+  runExecHandler(command).then(() => child.emit('exit', 0, null), () => child.emit('exit', 1, null));
+  return child;
+}
+
 cp.exec = fakeExec;
-for (const name of ['execSync', 'execFile', 'execFileSync', 'spawn', 'spawnSync', 'fork']) {
+cp.spawn = fakeSpawn;
+for (const name of ['execSync', 'execFile', 'execFileSync', 'spawnSync', 'fork']) {
   cp[name] = blocked(name);
 }
 
@@ -92,8 +109,9 @@ net.Socket.prototype.connect = function (...args) {
 const sandbox = {
   SandboxError,
   execCalls,
+  spawnOptions,
   setExecHandler(fn) { execHandler = fn; },
-  reset() { execCalls.length = 0; execHandler = null; },
+  reset() { execCalls.length = 0; spawnOptions.length = 0; execHandler = null; },
   allowPort(port) { allowedPorts.add(Number(port)); },
   disallowPort(port) { allowedPorts.delete(Number(port)); },
   // Run `node <args>` (the only real child process tests may start).
