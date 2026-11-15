@@ -5,7 +5,7 @@ Node.js command-line tools for running Facepunch Rust dedicated servers on Windo
 - `rustyconsole/`: sends a single WebRCON command (`consoleapi.js` holds the shared RCON call).
 - `rustybranch/`: checks Steam for build IDs on a branch (`branchapi.js` runs steamcmd).
 
-The code was hand-written from 2017 to 2022. An April 2024 ChatGPT refactor (`b0994b4`) introduced regressions, and `cf8df02` is the last commit before it. Work happens on `modernize/*` branches made from `development`.
+The code was hand-written from 2017 to 2022. An April 2024 ChatGPT refactor (`b0994b4`) introduced regressions, and `cf8df02` is the last commit before it. Work happens directly on `development`. Don't create feature branches.
 
 ## Environment: a live production server
 This host (SQUADONE, Windows Server 2019) runs live game servers for several communities: two Rust servers, plus Squad, Valheim, Arma 3, DCS, Space Engineers, The Forest and Minecraft. It also runs postgres. **Not damaging the box comes before everything else.**
@@ -27,7 +27,7 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 5. **Never point a dev RustyNail or rustyconsole at a live server** unless Ken has stopped that server's live RustyNail.
 6. **Tests must never kill real processes or run real steamcmd.** Use the fake WebRCON server and stub `child_process`.
 7. **The kill logic is dangerous.** `findTask` builds WMI `LIKE '%…%'` patterns from `launchdir`, `launchfile` and `launchexec`, and `endTask` runs `taskkill /t /f` on every match. An empty or broad value could match every process on the box. Don't make `endTask` work (bug #1) until path validation, a refusal for any `RustAdminRelease` path, and a dry-run mode exist and are tested.
-8. **Commits:** commit each fix as you go, without asking. Ken pushes with GitHub Desktop; `git push` from this shell hangs on a GitHub sign-in prompt. Merging into `master`/`development` and deploying to the live server folders need Ken's yes.
+8. **Commits:** commit each fix to `development` as you go, without asking. Ken pushes with GitHub Desktop; `git push` from this shell hangs on a GitHub sign-in prompt. Merging into `master` and deploying to the live server folders need Ken's yes.
 9. **Redact RCON and email passwords** in anything you print or summarize.
 
 `.claude/settings.json` backs these rules with deny rules. Those rules match command text, so they're a safety net, not a guarantee.
