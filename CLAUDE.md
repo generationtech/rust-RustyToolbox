@@ -34,7 +34,7 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 
 ## Running and testing
 - **Install:** `npm ci`
-- **Tests:** `npm test` runs `node --test test/*.test.js` in about 30 seconds; nearly all of that is `test/consoleapi.test.js` waiting out ws's 30-second close timeout (true before the ws upgrade too). CI (`.github/workflows/test.yml`) runs it on Ubuntu and Windows.
+- **Tests:** `npm test` runs `node --test test/*.test.js` in about 3 seconds. Don't use `t.mock.timers` in tests that open real sockets: it also mocks `clearTimeout`, so ws can't cancel its real 30-second close timer and the run stalls for 30 seconds. CI (`.github/workflows/test.yml`) runs it on Ubuntu and Windows.
 - **Every test file must `require('./helpers/sandbox')` first.** The sandbox fakes `child_process.exec` (tests install canned output with `setExecHandler`) and blocks every other `child_process` function and `process.kill`. It also blocks all network connections except to loopback ports registered by a test fake. The only real child process tests may start is `node` itself, through `sandbox.runNode()`.
 - **Test helpers in `test/helpers/`:**
   - `fake-rcon.js`: a fake WebRCON server.
