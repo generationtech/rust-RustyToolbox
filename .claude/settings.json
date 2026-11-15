@@ -82,17 +82,13 @@
       "Bash(git push*--force*)",
       "Bash(git push* -f*)",
       "Bash(git push*+*)",
-      "Bash(git push*main*)",
       "Bash(git push*--delete*)",
-      "Bash(git merge *)",
       "Bash(git rebase *)",
       "Bash(git reset --hard*)",
       "PowerShell(git push*--force*)",
       "PowerShell(git push* -f*)",
       "PowerShell(git push*+*)",
-      "PowerShell(git push*main*)",
       "PowerShell(git push*--delete*)",
-      "PowerShell(git merge *)",
       "PowerShell(git rebase *)",
       "PowerShell(git reset --hard*)"
     ]
