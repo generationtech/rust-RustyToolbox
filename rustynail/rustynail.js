@@ -17,6 +17,7 @@ const nodemailer = require('nodemailer');
 const cp = require("child_process");
 const branchapi = require('../rustybranch/branchapi');
 const consoleapi = require('../rustyconsole/consoleapi');
+const { exit } = require('process');
 
 const states = {
   STOP: 0,
@@ -298,8 +299,9 @@ async function checkManifest(file) {
   }
 }
 
-
-
+//
+//
+// Chatgpt code note refactor this into functional code. FAIL
 async function checkConfig(file) {
 //  Loads all the script configuration values from either
 //  command-line options, configuration file, or program defaults.
@@ -346,6 +348,7 @@ async function checkConfig(file) {
   }
 }
 
+// Chatgpt could not refactor this into functional code. FAIL
 function setConfig(jsonConfig, rustyVar, configKey) {
 //  Decision tree to set a sigle config value from
 //  either command-line, config file, or defaults,
@@ -360,8 +363,8 @@ function setConfig(jsonConfig, rustyVar, configKey) {
     rustyVar[configKey] = null;
   }
 }
-
-
+//
+//
 
 function printConfig() {
   console.log(); // Print an empty line for spacing
@@ -538,9 +541,10 @@ async function restartServer() {
 function isFirstThursday() {
   const today = new Date();
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const firstThursday = (1 + (7 - firstDayOfMonth.getDay())) % 7 + 1; // Calculate first Thursday
-
-  return today.getDate() === firstThursday;
+  // Calculate the first Thursday by adding the necessary days to the first day of the month
+  const firstThursday = new Date(firstDayOfMonth.setDate(1 + ((4 - firstDayOfMonth.getDay() + 7) % 7)));
+  
+  return today.getDate() === firstThursday.getDate() && today.getMonth() === firstThursday.getMonth();
 }
 
 async function checkSeed() {
