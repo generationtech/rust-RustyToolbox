@@ -46,9 +46,11 @@ This host (SQUADONE, Windows Server 2019) runs live game servers for several com
 ## Scope
 **Ken's direction (2026-11-14): fix RustyNail's identified bugs, and protect the rest of the Windows server. No new features.** Ask Ken before anything beyond a bug fix: dependency upgrades, rewrites (WMIC, RCON client, config schema), new options or modes.
 
-## Status (`modernize/phase-0` merged into `master` as PR #49; not deployed)
+## Status (merged to `master` and `development`; staging deployed 2026-11-14, vanilla not yet)
 Each fix has its own commit and tests:
 - **Fixed:** #1 to #9, the RCON hangs, `findTask` errors, password logging, hostname parsing and `--json` output.
+- **Main loop freeze after RustyNail starts the server (found on staging):** `startRust` awaited `exec('start ...')`, which waits until the server exits. It now launches with `spawn` and `stdio: 'ignore'` (`sys.launch`). Never launch long-running programs with `exec`.
+- **Verified by Ken on staging:** periodic version checks, starting the server when it isn't running at startup, and restarting it when it stops.
 - **#10:** already fixed on `development`. Staging gets it when it's deployed.
 - **#1 safety:** before RustyNail looks up, kills or starts anything, `launchConfigProblem()` must accept the launch settings. The process query matches only this server's launcher `cmd.exe` and its exact `RustDedicated.exe` path. RustyNail's own PIDs are never killed, and the server starts only once the old processes are confirmed gone. This was checked on the host with dummy processes, and both live configs pass the validation.
 
